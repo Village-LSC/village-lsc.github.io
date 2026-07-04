@@ -39,6 +39,7 @@ export interface SpriteItemState {
   animDelay: number;
   description: string;
   templateSize: string; // 'custom' or preset sizes
+  quality: 'optimal' | 'medium' | 'best';
 }
 
 export const CATEGORIES_LIST: CategoryData[] = [
@@ -78,7 +79,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: '32x32', price: '246 ₽' },
       { size: '64x64', price: '342 ₽' }
     ],
-    imagePath: '/src/assets/images/cat1.gif'
+    imagePath: '/images/cat1.gif'
   },
   {
     id: '2',
@@ -110,7 +111,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: '16x16', price: '480 ₽' },
       { size: '32x32', price: '560 ₽' }
     ],
-    imagePath: '/src/assets/images/cat2.gif'
+    imagePath: '/images/cat2.gif'
   },
   {
     id: '3',
@@ -144,7 +145,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: '16x16', price: '314 ₽' },
       { size: '32x32', price: '378 ₽' }
     ],
-    imagePath: '/src/assets/images/cat3.gif'
+    imagePath: '/images/cat3.gif'
   },
   {
     id: '4',
@@ -178,7 +179,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: '64x64', price: '884 ₽' },
       { size: '128x128', price: '1268 ₽' }
     ],
-    imagePath: '/src/assets/images/cat4.gif'
+    imagePath: '/images/cat4.gif'
   },
   {
     id: '5',
@@ -210,7 +211,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: '128x128', price: '1824 ₽' },
       { size: '256x256', price: '2848 ₽' }
     ],
-    imagePath: '/src/assets/images/cat5.gif'
+    imagePath: '/images/cat5.gif'
   },
   {
     id: '6',
@@ -244,7 +245,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: '32x32', price: '792 ₽' },
       { size: '64x64', price: '984 ₽' }
     ],
-    imagePath: '/src/assets/images/cat6.gif'
+    imagePath: '/images/cat6.gif'
   },
   {
     id: '7',
@@ -276,7 +277,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
       { size: 'Standard Skin', price: '400 ₽' },
       { size: 'HD Texture', price: '800 ₽' }
     ],
-    imagePath: '/src/assets/images/cat7.gif'
+    imagePath: '/images/cat7.gif'
   },
   {
     id: '8',
@@ -304,7 +305,7 @@ export const CATEGORIES_LIST: CategoryData[] = [
     examplesEn: [
       { size: '32x32', price: '1256 ₽' }
     ],
-    imagePath: '/src/assets/images/cat8.gif' // reuse items as fallback
+    imagePath: '/images/cat8.gif' // reuse items as fallback
   }
 ];
 

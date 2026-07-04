@@ -94,28 +94,28 @@ export function PixelMorphAnimation({ catId = '1', className }: PixelMorphProps)
     // Determine target files based on category selection
     let sources: string[] = [];
     if (catId === '2') {
-      sources = ['/src/assets/images/model_p1.png', '/src/assets/images/model_p2.png'];
+      sources = ['/images/model_p1.png', '/images/model_p2.png'];
     } else if (catId === '7') {
-      sources = ['/src/assets/images/skin_p1.png', '/src/assets/images/skin_p2.png'];
+      sources = ['/images/skin_p1.png', '/images/skin_p2.png'];
     } else if (catId === '3') {
       sources = [
-        '/src/assets/images/pricelist_uib1.png',
-        '/src/assets/images/pricelist_uib2.png',
-        '/src/assets/images/pricelist_uib3.png',
-        '/src/assets/images/pricelist_uib4.png'
+        '/images/pricelist_uib1.png',
+        '/images/pricelist_uib2.png',
+        '/images/pricelist_uib3.png',
+        '/images/pricelist_uib4.png'
       ];
     } else if (catId === '4') {
       sources = [
-        '/src/assets/images/pricelist_uim1.png',
-        '/src/assets/images/pricelist_uim2.png',
-        '/src/assets/images/pricelist_uim3.png'
+        '/images/pricelist_uim1.png',
+        '/images/pricelist_uim2.png',
+        '/images/pricelist_uim3.png'
       ];
     } else if (catId === '5') {
-      sources = ['/src/assets/images/pricelist_uih1.png', '/src/assets/images/pricelist_uih2.png'];
+      sources = ['/images/pricelist_uih1.png', '/images/pricelist_uih2.png'];
     } else if (catId === '6') {
-      sources = ['/src/assets/images/pricelist_p1.png', '/src/assets/images/pricelist_p2.png'];
+      sources = ['/images/pricelist_p1.png', '/images/pricelist_p2.png'];
     } else {
-      sources = ['/src/assets/images/cat1.png', '/src/assets/images/cat2.png', '/src/assets/images/cat3.png'];
+      sources = ['/images/cat1.png', '/images/cat2.png', '/images/cat3.png'];
     }
 
     const loadAll = sources.map((src) => loadImageOnly(src));

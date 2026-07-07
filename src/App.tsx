@@ -48,6 +48,390 @@ import { PixelMorphAnimation } from './components/PixelMorphAnimation';
 import { CategoryShowcaseAnimation } from './components/CategoryShowcaseAnimation';
 import { CanvasSizePreview } from './components/CanvasSizePreview';
 
+function DitherNebula({ isExpanded }: { isExpanded: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hStartRef = useRef<number | null>(null);
+  const targetYRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    const PIXEL_SCALE = 4;
+
+    let width = 0;
+    let height = 0;
+
+    const handleResize = () => {
+      if (canvas) {
+        width = Math.ceil(window.innerWidth / PIXEL_SCALE);
+        height = Math.ceil(window.innerHeight / PIXEL_SCALE);
+        canvas.width = width;
+        canvas.height = height;
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    const BAYER_4X4 = [
+      [0,  8,  2,  10],
+      [12, 4,  14, 6],
+      [3,  11, 1,  9],
+      [15, 7,  13, 5]
+    ];
+
+    // Gorgeous pixel-art nebula colors blending into #1c0d2b
+    const bgWaveR = 0x24, bgWaveG = 0x0a, bgWaveB = 0x3d; // #240a3d
+    const fgWaveR = 0x0a, fgWaveG = 0x03, fgWaveB = 0x14; // #0a0314 (deep rich dark void)
+
+    let time = 0;
+    let mFactor = 0;
+
+    interface NebulaStar {
+      xRatio: number;
+      yRatio: number;
+      baseAlpha: number;
+      speed: number;
+      phase: number;
+    }
+    const stars: NebulaStar[] = [];
+    for (let i = 0; i < 75; i++) {
+      stars.push({
+        xRatio: Math.random(),
+        yRatio: 0.1 + Math.random() * 0.9,
+        baseAlpha: 0.08 + Math.random() * 0.25, // Barely visible stars as requested
+        speed: 0.02 + Math.random() * 0.03,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+
+    const starColors = [
+      'rgba(235, 214, 247, ALPHA)', // Soft violet-white
+      'rgba(253, 244, 201, ALPHA)', // Soft warm white/yellow
+      'rgba(192, 132, 252, ALPHA)'  // Soft purple
+    ];
+
+    interface DitherParticle {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      size: number;
+      alpha: number;
+      life: number;
+      maxLife: number;
+    }
+    const ditherParticles: DitherParticle[] = [];
+
+    interface DitherChunk {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      width: number;
+      height: number;
+      alpha: number;
+      life: number;
+      maxLife: number;
+      pixels: boolean[][];
+    }
+    const ditherChunks: DitherChunk[] = [];
+
+    const generateBlob = (w: number, h: number): boolean[][] => {
+      const grid: boolean[][] = [];
+      for (let y = 0; y < h; y++) {
+        grid[y] = [];
+        for (let x = 0; x < w; x++) {
+          const dx = x - (w - 1) / 2;
+          const dy = y - (h - 1) / 2;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const maxDist = Math.sqrt((w / 2) * (w / 2) + (h / 2) * (h / 2));
+          grid[y][x] = Math.random() > (dist / (maxDist || 1)) * 0.75;
+        }
+      }
+      return grid;
+    };
+
+    const spawnParticle = (x: number, y: number, stateScale: number) => {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+      const speed = 0.4 + Math.random() * 1.5;
+      ditherParticles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed * (0.8 + stateScale * 0.4),
+        vy: Math.sin(angle) * speed * (0.8 + stateScale * 0.4) - 0.3,
+        size: Math.random() < 0.3 ? 1 : 2,
+        alpha: 0.8 + Math.random() * 0.2,
+        life: 0,
+        maxLife: 20 + Math.floor(Math.random() * 30)
+      });
+    };
+
+    const spawnChunk = (x: number, y: number, isRising: boolean) => {
+      const cw = 3 + Math.floor(Math.random() * 5);
+      const ch = 3 + Math.floor(Math.random() * 5);
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+      const speed = isRising ? 0.4 + Math.random() * 0.6 : 0.1 + Math.random() * 0.3;
+      ditherChunks.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 0.1,
+        vy: Math.sin(angle) * speed - (isRising ? 0.2 : 0.05),
+        width: cw,
+        height: ch,
+        alpha: 0.9 + Math.random() * 0.1,
+        life: 0,
+        maxLife: 50 + Math.floor(Math.random() * 60),
+        pixels: generateBlob(cw, ch)
+      });
+    };
+
+    // Initialize wave position
+    const arrowEl = document.getElementById('expand-arrow');
+    let arrowYInitial = Math.ceil(height * 0.55);
+    if (arrowEl && canvas) {
+      const arrowRect = arrowEl.getBoundingClientRect();
+      arrowYInitial = Math.ceil((arrowRect.bottom + 20) / PIXEL_SCALE);
+    }
+    if (hStartRef.current === null) {
+      hStartRef.current = isExpanded ? (height + 40) : arrowYInitial;
+    }
+    if (targetYRef.current === null) {
+      targetYRef.current = hStartRef.current;
+    }
+
+    const render = () => {
+      time += 0.35;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Dynamically align the nebula top to meet exactly below the toggle button
+      const currentArrowEl = document.getElementById('expand-arrow');
+      let arrowY = Math.ceil(height * 0.55);
+
+      if (currentArrowEl) {
+        const arrowRect = currentArrowEl.getBoundingClientRect();
+        arrowY = Math.ceil((arrowRect.bottom + 20) / PIXEL_SCALE);
+      }
+
+      const scrollY = window.scrollY || window.pageYOffset;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = window.innerHeight;
+      const maxScroll = scrollHeight - clientHeight;
+      const distanceToBottom = maxScroll - scrollY;
+
+      // Sits near bottom when expanded (leaving a dithered strip at the very end of the site), meets arrow button when collapsed
+      let targetWaveY = height + 40; // fully offscreen by default when expanded
+
+      if (!isExpanded) {
+        // Collapsed state: align exactly below the arrow button
+        targetWaveY = arrowY;
+      } else {
+        // Expanded state: only show when scrolled to the very bottom of the page
+        const footerTriggerHeight = 350; // trigger distance in pixels from the bottom of the page
+        if (distanceToBottom < footerTriggerHeight) {
+          // Normalize to a 0..1 factor of how far we are into the footer trigger zone
+          const factor = 1 - (Math.max(0, distanceToBottom) / footerTriggerHeight); // 0 at footer start, 1 at absolute bottom
+          
+          // Rise from offscreen (height + 40) to height - 15 (showing a thin, elegant 15px dithered strip at the very bottom edge of space)
+          const minWaveY = height + 40;
+          const maxWaveY = height - 15; // lowered to stay at the absolute bottom
+          targetWaveY = minWaveY - (minWaveY - maxWaveY) * factor;
+        }
+      }
+
+      // Smoothly interpolate targetYRef towards targetWaveY to buffer any scroll-wheel increments
+      if (targetYRef.current === null) {
+        targetYRef.current = targetWaveY;
+      } else {
+        targetYRef.current += (targetWaveY - targetYRef.current) * 0.08;
+      }
+
+      const diff = targetYRef.current - hStartRef.current!;
+      // Slower spring-like animation (0.025) for beautiful physics
+      hStartRef.current! += diff * 0.025;
+      const hStart = hStartRef.current!;
+
+      const imgData = ctx.createImageData(width, height);
+      const data = imgData.data;
+
+      // Calculate a continuous, smooth movement factor (0..1) to transition fluidly between rest and motion states
+      const targetMFactor = Math.min(1, Math.abs(diff) / 12.0);
+      mFactor += (targetMFactor - mFactor) * 0.04; // silky smooth trailing transition with no binary pops
+
+      const transitionWidth = 14;
+      const waveAmplitude = 5;
+
+      for (let x = 0; x < width; x++) {
+        const wave1 = hStart + Math.sin(x * 0.08 + time * 0.04) * waveAmplitude + Math.cos(x * 0.035 - time * 0.03) * (waveAmplitude + 1);
+        const wave2 = wave1 - 6 - Math.sin(x * 0.05 - time * 0.025) * 2.5;
+
+        const startY = Math.max(0, Math.floor(wave2 - transitionWidth));
+
+        for (let y = startY; y < height; y++) {
+          const idx = (y * width + x) * 4;
+          const threshold = BAYER_4X4[y % 4][x % 4] / 16;
+
+          let r = 0, g = 0, b = 0, a = 0;
+
+          if (y >= wave1 + transitionWidth) {
+            r = fgWaveR; g = fgWaveG; b = fgWaveB; a = 255;
+          } else if (y >= wave1) {
+            const d1 = (y - wave1) / transitionWidth;
+            if (d1 > threshold) {
+              r = fgWaveR; g = fgWaveG; b = fgWaveB; a = 255;
+            } else {
+              const d2 = (y - wave2 + transitionWidth) / transitionWidth;
+              if (d2 > threshold) {
+                r = bgWaveR; g = bgWaveG; b = bgWaveB; a = 255;
+              }
+            }
+          } else if (y >= wave2 - transitionWidth) {
+            const d2 = (y - wave2 + transitionWidth) / transitionWidth;
+            if (d2 > threshold) {
+              r = bgWaveR; g = bgWaveG; b = bgWaveB; a = 255;
+            }
+          }
+
+          if (a > 0) {
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = a;
+          }
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+
+      // Draw subtle twinkling stars inside the dithered nebula region (below the waves)
+      stars.forEach((star, index) => {
+        const sx = Math.floor(star.xRatio * width);
+        const sy = Math.floor(star.yRatio * height);
+
+        if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+          const waveHeight = hStart + Math.sin(sx * 0.08 + time * 0.04) * waveAmplitude + Math.cos(sx * 0.035 - time * 0.03) * (waveAmplitude + 1);
+          if (sy >= waveHeight) {
+            const blink = Math.sin(time * star.speed + star.phase);
+            const alpha = Math.max(0.03, star.baseAlpha + blink * 0.08);
+            
+            const threshold = BAYER_4X4[sy % 4][sx % 4] / 16;
+            if (alpha > threshold * 0.35) {
+              const baseColor = starColors[index % starColors.length];
+              ctx.fillStyle = baseColor.replace('ALPHA', String(alpha));
+              ctx.fillRect(sx, sy, 1, 1);
+            }
+          }
+        }
+      });
+
+      // Spawn custom atmospheric rising smoke particles and dither chunks during transition
+      if (ditherParticles.length < 180) {
+        const spawnProbability = 0.08 + 0.67 * mFactor;
+        if (Math.random() < spawnProbability) {
+          const spawnCount = mFactor > 0.35 ? (Math.random() < 0.5 ? 2 : 1) : 1;
+          for (let i = 0; i < spawnCount; i++) {
+            const rx = Math.floor(Math.random() * width);
+            const waveHeight = hStart + Math.sin(rx * 0.08 + time * 0.04) * waveAmplitude + Math.cos(rx * 0.035 - time * 0.03) * (waveAmplitude + 1);
+            spawnParticle(rx, waveHeight, mFactor);
+          }
+        }
+      }
+
+      // Spawn chunky pieces when transitioning (especially when collapsing/appearing or expanding/receding)
+      if (mFactor > 0.15 && ditherChunks.length < 35) {
+        const chunkProbability = 0.35 * mFactor;
+        if (Math.random() < chunkProbability) {
+          const rx = Math.floor(Math.random() * width);
+          const waveHeight = hStart + Math.sin(rx * 0.08 + time * 0.04) * waveAmplitude + Math.cos(rx * 0.035 - time * 0.03) * (waveAmplitude + 1);
+          spawnChunk(rx, waveHeight, true);
+        }
+      }
+
+      // Draw custom dither particles on top to make transition dissolve stunningly
+      ditherParticles.forEach((part, index) => {
+        part.x += part.vx;
+        part.y += part.vy;
+        part.life++;
+
+        if (part.life >= part.maxLife) {
+          ditherParticles.splice(index, 1);
+        } else {
+          const ratio = 1 - part.life / part.maxLife;
+          const currentAlpha = part.alpha * ratio;
+          
+          const px = Math.floor(part.x);
+          const py = Math.floor(part.y);
+          if (px >= 0 && px < width && py >= 0 && py < height) {
+            const threshold = BAYER_4X4[py % 4][px % 4] / 16;
+            if (currentAlpha > threshold) {
+              ctx.fillStyle = `rgb(${fgWaveR}, ${fgWaveG}, ${fgWaveB})`;
+              ctx.fillRect(px, py, part.size, part.size);
+            }
+          }
+        }
+      });
+
+      // Draw custom pixel chunks on top of everything!
+      for (let i = ditherChunks.length - 1; i >= 0; i--) {
+        const chunk = ditherChunks[i];
+        chunk.x += chunk.vx;
+        chunk.y += chunk.vy;
+        chunk.life++;
+
+        if (chunk.life >= chunk.maxLife) {
+          ditherChunks.splice(i, 1);
+        } else {
+          const ratio = 1 - chunk.life / chunk.maxLife;
+          const currentAlpha = chunk.alpha * ratio;
+
+          for (let cy = 0; cy < chunk.height; cy++) {
+            for (let cx = 0; cx < chunk.width; cx++) {
+              if (chunk.pixels[cy][cx]) {
+                const px = Math.floor(chunk.x + cx);
+                const py = Math.floor(chunk.y + cy);
+
+                if (px >= 0 && px < width && py >= 0 && py < height) {
+                  const threshold = BAYER_4X4[py % 4][px % 4] / 16;
+                  if (currentAlpha > threshold) {
+                    const isBgColor = (cx + cy) % 2 === 0;
+                    const r = isBgColor ? bgWaveR : fgWaveR;
+                    const g = isBgColor ? bgWaveG : fgWaveG;
+                    const b = isBgColor ? bgWaveB : fgWaveB;
+                    
+                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    ctx.fillRect(px, py, 1, 1);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isExpanded]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 w-screen h-screen pointer-events-none z-20"
+      style={{ imageRendering: 'pixelated' }}
+    />
+  );
+}
+
 function SeedParticleBurst() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -598,6 +982,9 @@ export default function App() {
     return saved !== null ? saved === 'true' : true;
   });
 
+  // Collapse / Expand state for the content below the header
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+
   const toggleBg = () => {
     setIsBgEnabled(prev => {
       const next = !prev;
@@ -649,6 +1036,7 @@ export default function App() {
 
   // Scroll & Social states
   const [showScrollBtn, setShowScrollBtn] = useState<boolean>(false);
+  const [showScrollToHomeBtn, setShowScrollToHomeBtn] = useState<boolean>(false);
   const [showSocialsDropdown, setShowSocialsDropdown] = useState<boolean>(false);
 
   // Configuration seed states
@@ -762,28 +1150,48 @@ export default function App() {
 
   useEffect(() => {
     const handleScroll = () => {
+      if (!isExpanded) {
+        setShowScrollBtn(false);
+        setShowScrollToHomeBtn(false);
+        return;
+      }
       const calcEl = document.getElementById('calc-anchored-form');
-      if (!calcEl) return;
+      if (!calcEl) {
+        setShowScrollBtn(false);
+        setShowScrollToHomeBtn(false);
+        return;
+      }
       const rect = calcEl.getBoundingClientRect();
       
       // Show button if the top of the calculator is below the bottom of the viewport
       if (rect.top > window.innerHeight) {
         setShowScrollBtn(true);
+        setShowScrollToHomeBtn(false);
       } else {
         setShowScrollBtn(false);
+        // Show To Home button if the top of the calculator is scrolled above the viewport or near the top
+        if (rect.top <= 100) {
+          setShowScrollToHomeBtn(true);
+        } else {
+          setShowScrollToHomeBtn(false);
+        }
       }
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [isExpanded]);
 
   const scrollToCalc = () => {
     const calcEl = document.getElementById('calc-anchored-form');
     if (calcEl) {
       calcEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  };
+
+  const scrollToHome = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSocialClick = (platform: 'telegram' | 'discord' | 'email') => {
@@ -863,10 +1271,7 @@ export default function App() {
     tryPlay();
 
     // Trigger on standard user interaction if initially blocked by browser autoplay policy
-    const handleUserInteraction = (e?: Event) => {
-      if (e && e.target && e.target instanceof Element && e.target.closest('button')) {
-        return;
-      }
+    const handleUserInteraction = () => {
       tryPlay();
     };
 
@@ -931,6 +1336,10 @@ export default function App() {
         console.log('Playback error:', err);
       });
     }
+  };
+
+  const handleExpandToggle = () => {
+    setIsExpanded(prev => !prev);
   };
 
   const [openDropdownSpriteId, setOpenDropdownSpriteId] = useState<number | null>(null);
@@ -1671,6 +2080,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#1c0d2b] text-[#fbf7ff] font-sans antialiased pb-20 selection:bg-[#c084fc] selection:text-[#1c0d2b] relative overflow-x-hidden">
+      {/* Dynamic Pixel Dithered Nebula Fog Overlay */}
+      <DitherNebula isExpanded={isExpanded} />
+
       {/* Interactive Cursor Glow with Retro Dithering */}
       {isBgEnabled && <InteractiveDitherBackground mousePos={mousePos} />}
 
@@ -1765,40 +2177,109 @@ export default function App() {
       </div>
 
       {/* Hero Section */}
-      <header className="max-w-4xl mx-auto text-center px-4 pt-10 pb-12 flex flex-col items-center">
-        {/* Avatar Area */}
-        <div className="relative group avatar-black-hole transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1) hover:scale-115 cursor-pointer">
-          <div className="absolute -inset-2 bg-purple-400 rounded-3xl blur-md opacity-0 group-hover:opacity-100 group-hover:animate-pulse transition-all duration-500"></div>
-          <div className="absolute -inset-1.5 bg-[#3d1a56] rounded-2xl blur-xs opacity-70 group-hover:opacity-100 transition duration-300"></div>
-          <div className="relative bg-[#2d143f] p-2 rounded-2xl border-4 border-[#180a24] group-hover:border-purple-300 transition-all duration-500 w-36 h-36 flex items-center justify-center overflow-hidden shadow-2xl">
-            <img
-              src="/images/avatar.jpg"
-              alt="Village_ Avatar"
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-all duration-500"
-            />
+      <div className="relative overflow-hidden w-full max-w-4xl mx-auto rounded-3xl mt-6 px-4">
+        <header className="relative z-10 text-center py-8 flex flex-col items-center select-none">
+          {/* Avatar Area */}
+          <div className="relative group avatar-black-hole transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1) hover:scale-105 cursor-pointer">
+            <div className="absolute -inset-2 bg-purple-400 rounded-3xl blur-md opacity-0 group-hover:opacity-100 group-hover:animate-pulse transition-all duration-500"></div>
+            <div className="absolute -inset-1.5 bg-[#3d1a56] rounded-2xl blur-xs opacity-70 group-hover:opacity-100 transition duration-300"></div>
+            <div className={`relative bg-[#2d143f] p-2 rounded-2xl border-4 border-[#180a24] group-hover:border-purple-300 transition-all duration-500 flex items-center justify-center overflow-hidden shadow-2xl ${
+              isExpanded ? 'w-36 h-36 sm:w-40 sm:h-40 md:w-44 md:h-44' : 'w-44 h-44 sm:w-52 sm:h-52 lg:w-56 lg:h-56'
+            }`}>
+              <img
+                src="/images/avatar.jpg"
+                alt="Village_ Avatar"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-all duration-500"
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Title */}
-        <h1 className="mt-6 font-display text-4xl sm:text-5xl font-bold tracking-tight text-[#fbf7ff] drop-shadow-[0_2px_10px_rgba(192,132,252,0.3)]">
-          Village_
-        </h1>
-        {/* PriceList Subtitle with a nice RPG styled frame */}
-        <div className="mt-2 bg-[#220d33] text-[#ebd6f7] px-6 py-1.5 rounded-lg text-lg font-mono tracking-widest uppercase shadow-sm border border-[#180a24]">
-          {t.subtitle}
-        </div>
-
-        {/* Beautiful Pixel Artist Description Box */}
-        <div className="mt-5 max-w-lg bg-[#2d143f] rounded-2xl border-2 border-[#3d1a56] p-4 text-[#ebd6f7] text-xs sm:text-sm font-semibold relative shadow-md group transition-all duration-300 hover:border-purple-300 hover:shadow-[0_0_25px_rgba(192,132,252,0.15)] select-none">
-          <div className="absolute inset-0.5 border border-[#ebd6f7]/5 rounded-xl pointer-events-none"></div>
-          <div className="relative z-10 flex flex-col items-center gap-2">
-            <p className="leading-relaxed font-sans text-[#ebd6f7] text-center whitespace-pre-line">
-              {t.artistDescription}
-            </p>
+          {/* Title */}
+          <h1 className={`mt-5 font-display font-bold tracking-tight text-[#fbf7ff] drop-shadow-[0_2px_10px_rgba(192,132,252,0.3)] transition-all duration-500 ${
+            isExpanded ? 'text-3xl sm:text-4xl md:text-5xl' : 'text-4xl sm:text-5xl md:text-6xl'
+          }`}>
+            Village_
+          </h1>
+          {/* PriceList Subtitle with a nice RPG styled frame */}
+          <div className={`mt-2 bg-[#220d33] text-[#ebd6f7] px-6 py-1.5 rounded-lg font-mono tracking-widest uppercase shadow-sm border border-[#180a24] transition-all duration-500 ${
+            isExpanded ? 'text-lg px-6 py-1.5' : 'text-xl px-7 py-2'
+          }`}>
+            {t.subtitle}
           </div>
-        </div>
-      </header>
+
+          {/* Beautiful Pixel Artist Description Box */}
+          <div className={`mt-5 bg-[#2d143f]/90 rounded-2xl border-2 border-[#3d1a56] p-5 text-[#ebd6f7] relative shadow-md group transition-all duration-500 hover:border-purple-300 hover:shadow-[0_0_25px_rgba(192,132,252,0.15)] transition-all duration-500 ${
+            isExpanded ? 'max-w-xl text-sm sm:text-base text-purple-200/90' : 'max-w-2xl text-base sm:text-lg'
+          }`}>
+            <div className="absolute inset-0.5 border border-[#ebd6f7]/5 rounded-xl pointer-events-none"></div>
+            <div className="relative z-10 flex flex-col items-center gap-4">
+              <p className="leading-relaxed font-sans text-center whitespace-pre-line">
+                {t.artistDescription}
+              </p>
+
+              {/* Website link inside description box (only when collapsed) */}
+              <AnimatePresence>
+                {!isExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: 10, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="w-full flex justify-center pt-2 overflow-hidden"
+                  >
+                    <a
+                      href="https://linktr.ee/Village_LSC"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white font-mono text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl border-2 border-[#180a24] shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    >
+                      <Globe className="w-4 h-4 text-white animate-spin-slow" />
+                      <span>{lang === 'ru' ? 'Мой сайт' : 'My Website'}: linktr.ee/Village_LSC</span>
+                    </a>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </header>
+      </div>
+
+      {/* Expand / Collapse Interactive Panel - Just a beautiful simple arrow */}
+      <div className="max-w-4xl mx-auto px-4 mb-16 flex flex-col items-center relative z-30">
+        <button
+          id="expand-arrow"
+          onClick={handleExpandToggle}
+          className="group flex flex-col items-center justify-center p-3 text-purple-400 hover:text-purple-300 transition-all duration-300 transform active:scale-90 cursor-pointer select-none"
+          title={isExpanded ? (lang === 'ru' ? 'Свернуть' : 'Collapse') : (lang === 'ru' ? 'Развернуть' : 'Expand')}
+        >
+          <motion.div
+            animate={{ y: isExpanded ? [0, -4, 0] : [0, 4, 0] }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+            className="flex flex-col items-center gap-1.5"
+          >
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-purple-400/80 group-hover:text-purple-300 transition-colors">
+              {isExpanded ? (lang === 'ru' ? 'Свернуть' : 'Collapse') : (lang === 'ru' ? 'Развернуть' : 'Expand')}
+            </span>
+            {isExpanded ? (
+              <ChevronUp className="w-10 h-10 text-purple-400 group-hover:text-white transition-colors" />
+            ) : (
+              <ChevronDown className="w-10 h-10 text-purple-400 group-hover:text-white transition-colors animate-pulse" />
+            )}
+          </motion.div>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            key="expanded-content"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            transition={{ duration: 0.4 }}
+            className="w-full"
+          >
 
       {/* Categories Showcase - fully adaptive page-width layout */}
       <section className="w-full max-w-none px-4 sm:px-8 md:px-16 lg:px-24 xl:px-32 mb-20 relative z-10">
@@ -2018,8 +2499,17 @@ export default function App() {
               </p>
             </div>
 
-            {/* Top Right Controls: Random button & Currency selector */}
+            {/* Top Right Controls: Return to Home, Random button & Currency selector */}
             <div className="flex flex-wrap items-center gap-3 relative z-10">
+              <button
+                type="button"
+                onClick={scrollToHome}
+                className="bg-[#c084fc] hover:bg-[#a855f7] text-[#1c0d2b] font-display font-extrabold text-sm uppercase px-4 py-2.5 rounded-xl border-2 border-[#140620] shadow-[0_0_15px_rgba(192,132,252,0.5)] transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5 select-none font-sans"
+              >
+                <ArrowUpCircle className="w-3.5 h-3.5 text-[#1c0d2b] animate-bounce shrink-0" />
+                <span>{lang === 'ru' ? 'На главную' : 'To Main Page'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={addRandomSprite}
@@ -3518,9 +4008,26 @@ export default function App() {
           </div>
       </section>
 
-      {/* Floating Scroll to Calculator Button */}
+      {/* Edge of Space Footer */}
+      <footer className="w-full max-w-4xl mx-auto px-4 pt-36 pb-8 text-center relative z-30 select-none">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-1.5 h-1.5 rounded-full bg-purple-400/50 animate-ping"></div>
+          <p className="font-mono text-xs tracking-[0.25em] text-purple-400/60 uppercase">
+            {lang === 'ru' ? 'Вы достигли края космоса' : 'You have reached the edge of space'}
+          </p>
+          <span className="font-mono text-[9px] text-purple-400/35 uppercase">
+            Village_ LSC • 2026
+          </span>
+        </div>
+      </footer>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Scroll Buttons */}
       <AnimatePresence>
-        {showScrollBtn && (
+        {showScrollBtn && isExpanded && (
           <motion.button
             key="scroll-btn"
             initial={{ opacity: 0, y: 50, x: '-50%' }}
@@ -3532,6 +4039,20 @@ export default function App() {
           >
             <ArrowUpCircle className="w-4 h-4 rotate-180 animate-bounce" />
             <span>{t.scrollToCalcBtn}</span>
+          </motion.button>
+        )}
+        {showScrollToHomeBtn && isExpanded && (
+          <motion.button
+            key="scroll-home-btn"
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            onClick={scrollToHome}
+            className="fixed top-6 left-1/2 z-50 bg-[#c084fc] hover:bg-[#a855f7] text-[#1c0d2b] font-display font-extrabold text-sm sm:text-base uppercase tracking-wider px-6 py-3.5 rounded-full border-4 border-[#140620] shadow-[0_0_20px_rgba(192,132,252,0.6)] flex items-center gap-2 cursor-pointer select-none active:scale-95 font-sans"
+          >
+            <ArrowUpCircle className="w-4 h-4 animate-bounce" />
+            <span>{lang === 'ru' ? 'На главную' : 'To Main Page'}</span>
           </motion.button>
         )}
       </AnimatePresence>

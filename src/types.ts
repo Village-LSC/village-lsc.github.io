@@ -422,7 +422,16 @@ export const TRANSLATIONS = {
     sendToSocialsBtn: 'Отправить в соц. сети',
     telegram: 'Телеграм',
     discord: 'Дискорд',
-    email: 'Почта'
+    email: 'Почта',
+    noDeadlineBtn: 'Без дедлайна',
+    noDeadlineDesc: 'Убирает все будущие дедлайны и ставит заказ на долгосрочное ожидание. Предоставляет скидку 15% на весь заказ.',
+    noDeadlineSurchargeNote: '(Скидка 15% не действует при полной загруженности очереди)',
+    loadStatusLabel: 'Загруженность очереди:',
+    loadStatusFree: 'Свободный',
+    loadStatusMedium: 'Средний (+25% на весь заказ)',
+    loadStatusFull: 'Полный (+35% на весь заказ)',
+    loadStatusFullNoDeadline: 'Полный (+35%, только без дедлайна)',
+    orderBlockedWarning: 'Внимание! Прием стандартных заказов временно приостановлен из-за полной загруженности исполнителя. Размещение заказа возможно только с опцией «Без дедлайна» (действует наценка +35%, скидка 15% отключена).'
   },
   en: {
     title: 'Village_',
@@ -536,6 +545,15 @@ export const TRANSLATIONS = {
     sendToSocialsBtn: 'Send to Socials',
     telegram: 'Telegram',
     discord: 'Discord',
-    email: 'Email'
+    email: 'Email',
+    noDeadlineBtn: 'No Deadline',
+    noDeadlineDesc: 'Removes all future deadlines and sets the order to long-term waiting. Provides a 15% discount on the entire order.',
+    noDeadlineSurchargeNote: '(15% discount is deactivated under full load status)',
+    loadStatusLabel: 'Queue Load Status:',
+    loadStatusFree: 'Free',
+    loadStatusMedium: 'Medium (+25% on entire order)',
+    loadStatusFull: 'Full (+35% on entire order)',
+    loadStatusFullNoDeadline: 'Full (+35%, only No Deadline allowed)',
+    orderBlockedWarning: 'Notice! Standard orders are temporarily suspended due to full workload. Ordering is only available with the "No Deadline" option selected (+35% surcharge applies, 15% discount is deactivated).'
   }
 };

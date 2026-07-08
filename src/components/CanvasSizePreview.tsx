@@ -46,6 +46,10 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
   const drawW = Math.round(baseW * zoom);
   const drawH = Math.round(baseH * zoom);
 
+  // Calculate cell sizes based on resolution
+  const cellW = drawW / safeW;
+  const cellH = drawH / safeH;
+
   const handleZoomIn = () => {
     setZoom(prev => Math.min(5.0, Number((prev + 0.5).toFixed(1))));
   };
@@ -73,6 +77,10 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
 
   const modalDrawW = Math.round(modalBaseW * modalZoom);
   const modalDrawH = Math.round(modalBaseH * modalZoom);
+
+  // Calculate cell sizes based on resolution for the modal
+  const modalCellW = modalDrawW / safeW;
+  const modalCellH = modalDrawH / safeH;
 
   const handleModalZoomIn = () => {
     setModalZoom(prev => Math.min(10.0, Number((prev + 0.5).toFixed(1))));
@@ -235,7 +243,7 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
           className="relative rounded border-2 border-purple-500/40 shadow-[0_0_15px_rgba(139,92,246,0.15)] shrink-0 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
           style={{
             backgroundImage: `conic-gradient(from 0deg, #12051d 0.25turn, #200833 0.25turn 0.5turn, #12051d 0.5turn 0.75turn, #200833 0.75turn)`,
-            backgroundSize: `16px 16px`,
+            backgroundSize: `${cellW * 2}px ${cellH * 2}px`,
             imageRendering: 'pixelated'
           }}
         />
@@ -358,7 +366,7 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
                   className="relative rounded-lg border-2 border-purple-500/60 shadow-[0_0_35px_rgba(139,92,246,0.25)] flex items-center justify-center select-none cursor-grab active:cursor-grabbing shrink-0"
                   style={{
                     backgroundImage: `conic-gradient(from 0deg, #12051d 0.25turn, #200833 0.25turn 0.5turn, #12051d 0.5turn 0.75turn, #200833 0.75turn)`,
-                    backgroundSize: `16px 16px`,
+                    backgroundSize: `${modalCellW * 2}px ${modalCellH * 2}px`,
                     imageRendering: 'pixelated'
                   }}
                 />

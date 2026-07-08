@@ -44,6 +44,7 @@ import {
   CATEGORIES_LIST,
   TRANSLATIONS
 } from './types';
+import { CURRENT_LOAD_STATUS } from './loadStatus';
 import { PixelMorphAnimation } from './components/PixelMorphAnimation';
 import { CategoryShowcaseAnimation } from './components/CategoryShowcaseAnimation';
 import { CanvasSizePreview } from './components/CanvasSizePreview';
@@ -1014,6 +1015,27 @@ export default function App() {
 
   // Global settings
   const [speedRate, setSpeedRate] = useState<number>(1.0); // 1.0 Moderate, 1.25 Priority
+  const [noDeadline, setNoDeadline] = useState<boolean>(CURRENT_LOAD_STATUS === 2);
+
+  useEffect(() => {
+    if (CURRENT_LOAD_STATUS === 2) {
+      setNoDeadline(true);
+    }
+  }, [CURRENT_LOAD_STATUS]);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const triggerToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
   const [showLog, setShowLog] = useState<boolean>(false);
   const [showDiscountHelp, setShowDiscountHelp] = useState<boolean>(false);
   const [showQualityHelp, setShowQualityHelp] = useState<boolean>(false);
@@ -1197,7 +1219,10 @@ export default function App() {
       window.open('https://t.me/Village_Village', '_blank');
     } else if (platform === 'discord') {
       navigator.clipboard.writeText('villagelsc_');
-      alert(lang === 'ru' ? 'Никнейм Дискорд @villagelsc_ скопирован!' : 'Discord username @villagelsc_ copied!');
+      triggerToast(
+        lang === 'ru' ? 'Никнейм Дискорд @villagelsc_ скопирован!' : 'Discord username @villagelsc_ copied!',
+        'success'
+      );
       window.open('https://discord.com', '_blank');
     } else if (platform === 'email') {
       const subject = encodeURIComponent('Pixel Art Order - TZ');
@@ -1483,6 +1508,8 @@ export default function App() {
     const itemsLogs: string[] = [];
     const rawItems: any[] = [];
 
+    const actualSpeedRate = noDeadline ? 1.0 : speedRate;
+
     const totalSpritesCount = sprites.reduce((sum, s) => sum + s.countOrig + s.countVar, 0);
     const isLargeSpecification = totalSpritesCount > 100;
 
@@ -1506,7 +1533,7 @@ export default function App() {
       for (let i = 0; i < s.countOrig; i++) {
         cumulativeSprites++;
         if (cumulativeSprites > 100) {
-          surchargeBreakdownOrig += Math.round(res.animatedSinglePrice * speedRate * 10);
+          surchargeBreakdownOrig += Math.round(res.animatedSinglePrice * actualSpeedRate * 10);
         }
         if (!isLargeSpecification) {
           let discountPercent = 0;
@@ -1525,7 +1552,7 @@ export default function App() {
       for (let i = 0; i < s.countVar; i++) {
         cumulativeSprites++;
         if (cumulativeSprites > 100) {
-          surchargeBreakdownVar += Math.round(res.singleVarPrice * speedRate * 10);
+          surchargeBreakdownVar += Math.round(res.singleVarPrice * actualSpeedRate * 10);
         }
         if (!isLargeSpecification) {
           let discountPercent = 0;
@@ -1581,9 +1608,9 @@ export default function App() {
       
       if (itemDiscountAmount > 0) {
         if (lang === 'ru') {
-          itemLog += `   • Оптовая скидка для этой позиции (с учётом лимитов >10 и >50 ассетов): -${formatPrice(Math.round(itemDiscountAmount * speedRate))}\n`;
+          itemLog += `   • Оптовая скидка для этой позиции (с учётом лимитов >10 и >50 ассетов): -${formatPrice(Math.round(itemDiscountAmount * actualSpeedRate))}\n`;
         } else {
-          itemLog += `   • Progressive wholesale discount for this item (with limits >10 and >50 assets): -${formatPrice(Math.round(itemDiscountAmount * speedRate))}\n`;
+          itemLog += `   • Progressive wholesale discount for this item (with limits >10 and >50 assets): -${formatPrice(Math.round(itemDiscountAmount * actualSpeedRate))}\n`;
         }
       }
 
@@ -1599,11 +1626,27 @@ export default function App() {
     });
 
     const baseTotalRounded = Math.round(rawTotal);
-    const priceBeforeDiscount = Math.round(baseTotalRounded * speedRate);
+    const priceBeforeDiscount = Math.round(baseTotalRounded * actualSpeedRate);
 
-    const bulkDiscountAmount = Math.round(totalRawDiscount * speedRate);
+    const bulkDiscountAmount = Math.round(totalRawDiscount * actualSpeedRate);
     const hasBulkDiscount = bulkDiscountAmount > 0;
-    const finalPriceRub = priceBeforeDiscount - bulkDiscountAmount + surchargeAmount;
+    
+    // Subtotal before load surcharges or "no deadline" discounts
+    const subtotalPrice = priceBeforeDiscount - bulkDiscountAmount + surchargeAmount;
+    
+    // Load markup: +25% if CURRENT_LOAD_STATUS === 1 (Medium), +35% if CURRENT_LOAD_STATUS === 2 (Full)
+    const loadMarkupAmount = CURRENT_LOAD_STATUS === 1 
+      ? Math.round(subtotalPrice * 0.25) 
+      : CURRENT_LOAD_STATUS === 2 
+      ? Math.round(subtotalPrice * 0.35) 
+      : 0;
+    
+    // "No deadline" discount: -15% if noDeadline is ON, and load status is NOT 2 (Full)
+    const noDeadlineDiscountAmount = (noDeadline && CURRENT_LOAD_STATUS !== 2) 
+      ? Math.round((subtotalPrice + loadMarkupAmount) * 0.15) 
+      : 0;
+
+    const finalPriceRub = Math.max(0, subtotalPrice + loadMarkupAmount - noDeadlineDiscountAmount);
     const priceBeforeDiscountTotal = priceBeforeDiscount + surchargeAmount;
 
     // Prepayment bracket rules: calculated using a logarithmic function, but is exactly 50% on large specifications.
@@ -1623,9 +1666,13 @@ export default function App() {
       priceBeforeDiscount,
       priceBeforeDiscountTotal,
       totalSpritesCount,
-      surchargeAmount
+      surchargeAmount,
+      actualSpeedRate,
+      loadMarkupAmount,
+      noDeadlineDiscountAmount,
+      subtotalPrice
     };
-  }, [sprites, speedRate, lang, currency, usdRate]);
+  }, [sprites, speedRate, noDeadline, lang, currency, usdRate]);
 
   // Handle preset templates in dropdown
   const applyPresetSize = (id: number, val: string) => {
@@ -1961,9 +2008,11 @@ export default function App() {
     let hasSizeErrors = sprites.some(s => s.categoryId !== '7' && (s.width > 2000 || s.height > 2000));
     if (hasSizeErrors) {
       if (autoScroll) {
-        alert(lang === 'ru' 
-          ? 'Превышен максимальный размер (2000px)! Пожалуйста, исправьте значения.' 
-          : 'Maximum size exceeded (2000px)! Please correct the values.'
+        triggerToast(
+          lang === 'ru' 
+            ? 'Превышен максимальный размер (2000px)! Пожалуйста, исправьте значения.' 
+            : 'Maximum size exceeded (2000px)! Please correct the values.',
+          'error'
         );
       }
       return;
@@ -1982,43 +2031,55 @@ export default function App() {
       }
     });
 
-    const queueLabelText = speedRate === 1.25 ? t.tzQueuePriority : t.tzQueueModerate;
-    
     tzText += `==================================================\n`;
     if (lang === 'ru') {
+      const loadStatusText = CURRENT_LOAD_STATUS === 0 
+        ? 'Свободный (наценка 0%)' 
+        : CURRENT_LOAD_STATUS === 1 
+        ? 'Средний (+25% наценка на весь заказ)' 
+        : 'Полный (+35% наценка на весь заказ)';
+      tzText += `Загруженность очереди: ${loadStatusText}\n`;
+      tzText += `Режим сроков заказа: ${noDeadline ? '«Без дедлайна» (долгосрочное ожидание, скидка -15% - отключена при полной загруженности)' : 'Стандартный (с дедлайном)'}\n`;
+      
       if (orderCalculations.totalSpritesCount > 100) {
-        tzText += `Внимание: Слишком много, сократите ТЗ! (Превышен лимит в 100 спрайтов, начислена наценка +1000% на излишек: +${formatPrice(orderCalculations.surchargeAmount)})\n`;
+        tzText += `Внимание: Превышен оптимальный лимит в 100 спрайтов, наценка +1000% на излишек: +${formatPrice(orderCalculations.surchargeAmount)}\n`;
       }
       if (orderCalculations.hasBulkDiscount) {
-        tzText += `Внимание: Применена накопительная оптовая скидка (действует только на последующие ассеты после 10-го и 50-го): -${formatPrice(orderCalculations.bulkDiscountAmount)} (уже учтено в итоговой стоимости)\n`;
+        tzText += `Внимание: Применена накопительная оптовая скидка (на последующие ассеты после 10-го и 50-го): -${formatPrice(orderCalculations.bulkDiscountAmount)}\n`;
       }
-      if (orderCalculations.hasBulkDiscount) {
-        tzText += `Условия выполнения заказа: приоритет сроков — «${queueLabelText}».\n`;
-        tzText += `Итоговая стоимость до скидки: ${formatPrice(orderCalculations.priceBeforeDiscountTotal)}\n`;
-        tzText += `Итоговая стоимость со скидкой: ${formatPrice(orderCalculations.finalPriceRub)} (скидка действует только на последующие ассеты, на прошлые не работает).\n`;
-        tzText += `Размер предоплаты (${orderCalculations.prepayPercent}%) равен ${formatPrice(orderCalculations.prepayAmountRub)}.\n`;
-      } else {
-        tzText += `Условия выполнения заказа: приоритет сроков — «${queueLabelText}».\n`;
-        tzText += `Итоговая стоимость составляет ${formatPrice(orderCalculations.finalPriceRub)}.\n`;
-        tzText += `Размер предоплаты (${orderCalculations.prepayPercent}%) равен ${formatPrice(orderCalculations.prepayAmountRub)}.\n`;
+      if (orderCalculations.loadMarkupAmount > 0) {
+        tzText += `Внимание: Наценка за загруженность очереди: +${formatPrice(orderCalculations.loadMarkupAmount)}\n`;
       }
+      if (orderCalculations.noDeadlineDiscountAmount > 0) {
+        tzText += `Внимание: Скидка за заказ без дедлайна (-15%): -${formatPrice(orderCalculations.noDeadlineDiscountAmount)}\n`;
+      }
+      
+      tzText += `\nИтоговая стоимость заказа: ${formatPrice(orderCalculations.finalPriceRub)}\n`;
+      tzText += `Размер требуемой предоплаты (${orderCalculations.prepayPercent}%): ${formatPrice(orderCalculations.prepayAmountRub)}\n`;
     } else {
+      const loadStatusText = CURRENT_LOAD_STATUS === 0 
+        ? 'Free (0% surcharge)' 
+        : CURRENT_LOAD_STATUS === 1 
+        ? 'Medium (+25% surcharge on entire order)' 
+        : 'Full (+35% surcharge on entire order)';
+      tzText += `Queue workload status: ${loadStatusText}\n`;
+      tzText += `Selected deadline policy: ${noDeadline ? '"No Deadline" (long-term queue expectation, -15% discount granted - except under full load)' : 'Standard Timeframe (with deadline)'}\n`;
+      
       if (orderCalculations.totalSpritesCount > 100) {
-        tzText += `Warning: Too much, shorten the specification! (Limit of 100 sprites exceeded, a +1000% surcharge has been applied to the excess: +${formatPrice(orderCalculations.surchargeAmount)})\n`;
+        tzText += `Warning: Limit of 100 sprites exceeded, a +1000% surcharge applied to the excess: +${formatPrice(orderCalculations.surchargeAmount)}\n`;
       }
       if (orderCalculations.hasBulkDiscount) {
-        tzText += `Notice: Cumulative wholesale discount applied (applies strictly to subsequent assets after the 10th and 50th): -${formatPrice(orderCalculations.bulkDiscountAmount)} (already included in the total cost)\n`;
+        tzText += `Notice: Cumulative wholesale discount applied: -${formatPrice(orderCalculations.bulkDiscountAmount)}\n`;
       }
-      if (orderCalculations.hasBulkDiscount) {
-        tzText += `Order terms: queue priority is "${queueLabelText}".\n`;
-        tzText += `Total cost before discount: ${formatPrice(orderCalculations.priceBeforeDiscountTotal)}\n`;
-        tzText += `Total cost with discount: ${formatPrice(orderCalculations.finalPriceRub)} (the discount applies only to subsequent assets, not retroactively).\n`;
-        tzText += `Prepayment (${orderCalculations.prepayPercent}%) is ${formatPrice(orderCalculations.prepayAmountRub)}.\n`;
-      } else {
-        tzText += `Order terms: queue priority is "${queueLabelText}".\n`;
-        tzText += `The total cost is ${formatPrice(orderCalculations.finalPriceRub)}.\n`;
-        tzText += `Prepayment (${orderCalculations.prepayPercent}%) is ${formatPrice(orderCalculations.prepayAmountRub)}.\n`;
+      if (orderCalculations.loadMarkupAmount > 0) {
+        tzText += `Notice: Surcharge for workload applied: +${formatPrice(orderCalculations.loadMarkupAmount)}\n`;
       }
+      if (orderCalculations.noDeadlineDiscountAmount > 0) {
+        tzText += `Notice: Discount for choosing No Deadline (-15%): -${formatPrice(orderCalculations.noDeadlineDiscountAmount)}\n`;
+      }
+      
+      tzText += `\nGrand Total: ${formatPrice(orderCalculations.finalPriceRub)}\n`;
+      tzText += `Prepayment required (${orderCalculations.prepayPercent}%): ${formatPrice(orderCalculations.prepayAmountRub)}\n`;
     }
     tzText += `==================================================\n`;
     if (lang === 'ru') {
@@ -2045,7 +2106,7 @@ export default function App() {
   // Copy TZ to Clipboard
   const copyTZ = () => {
     if (!tzOutput) {
-      alert(t.generateAlert);
+      triggerToast(t.generateAlert, 'error');
       return;
     }
     navigator.clipboard.writeText(tzOutput);
@@ -2056,7 +2117,7 @@ export default function App() {
   // Download TZ as .txt file
   const downloadTZFile = () => {
     if (!tzOutput) {
-      alert(t.generateAlert);
+      triggerToast(t.generateAlert, 'error');
       return;
     }
 
@@ -3426,41 +3487,105 @@ export default function App() {
             {/* Subtle internal grid border for global parameters */}
             <div className="absolute inset-1 border border-[#ebd6f7]/5 rounded-xl pointer-events-none"></div>
 
-            <h3 className="font-display text-lg font-bold tracking-tight text-purple-300 mb-4 flex items-center gap-2 relative z-10">
+            <h3 className="font-display text-lg font-bold tracking-tight text-purple-300 mb-6 flex items-center gap-2 relative z-10">
               <Settings className="w-5 h-5 text-purple-300" />
               <span>{t.globalParamsTitle}</span>
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end relative z-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start relative z-10">
+              {/* Queue Urgency Control */}
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-[#ebd6f7]/75 mb-2 flex items-center gap-1">
                   <span>{t.queueUrgency}</span>
                 </label>
                 <button
                   type="button"
+                  disabled={noDeadline}
                   onClick={() => setSpeedRate(prev => prev === 1.0 ? 1.25 : 1.0)}
-                  className={`w-full px-5 py-4 rounded-xl font-bold transition-all flex items-center justify-between gap-3 cursor-pointer active:scale-95 shadow-lg border-2 ${
-                    speedRate === 1.25
-                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border-purple-400 shadow-[0_0_22px_rgba(192,132,252,0.45)] scale-[1.01]'
-                      : 'bg-[#12051d] hover:bg-[#1d0b2e] text-[#ebd6f7] border-[#3d1a56] hover:border-purple-400'
+                  className={`w-full px-5 py-4 rounded-xl font-bold transition-all flex items-center justify-between gap-3 shadow-lg border-2 ${
+                    noDeadline
+                      ? 'bg-[#12051d]/40 text-[#ebd6f7]/40 border-[#3d1a56]/40 cursor-not-allowed opacity-50'
+                      : speedRate === 1.25
+                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border-purple-400 shadow-[0_0_22px_rgba(192,132,252,0.45)] scale-[1.01] cursor-pointer active:scale-95'
+                      : 'bg-[#12051d] hover:bg-[#1d0b2e] text-[#ebd6f7] border-[#3d1a56] hover:border-purple-400 cursor-pointer active:scale-95'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <Sparkles className={`w-4.5 h-4.5 ${speedRate === 1.25 ? 'text-yellow-300 animate-spin-slow' : 'text-purple-500'}`} />
+                    <Sparkles className={`w-4.5 h-4.5 ${!noDeadline && speedRate === 1.25 ? 'text-yellow-300 animate-spin-slow' : 'text-purple-500/55'}`} />
                     <span className="text-xs sm:text-sm uppercase tracking-widest font-black">
                       {lang === 'ru' ? 'Приоритет' : 'Priority'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded border ${
-                      speedRate === 1.25 
+                      !noDeadline && speedRate === 1.25 
                         ? 'bg-[#12051d] text-purple-300 border-purple-400/40' 
-                        : 'bg-purple-950 text-purple-300 border-purple-400/20'
+                        : 'bg-purple-950 text-purple-300/40 border-purple-400/10'
                     }`}>
                       +25%
                     </span>
-                    {speedRate === 1.25 ? (
+                    {!noDeadline && speedRate === 1.25 ? (
                       <span className="text-[10px] font-black uppercase bg-[#12051d] text-green-400 px-2.5 py-1 rounded border-2 border-green-400/80 animate-pulse">
+                        {lang === 'ru' ? 'АКТИВЕН' : 'ACTIVE'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase bg-purple-950/60 text-purple-400/60 px-2 py-1 rounded border border-purple-500/10">
+                        {lang === 'ru' ? 'ВЫКЛ' : 'OFF'}
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                <div className="mt-3 bg-black/20 p-3 rounded-xl border border-white/5 text-xs sm:text-sm text-[#ebd6f7]/70 leading-relaxed font-medium min-h-[90px]">
+                  <strong className="text-purple-300">{t.speedHelpTitle}</strong>
+                  <p className="mt-1 font-sans text-[#ebd6f7]/90 font-semibold">
+                    {noDeadline 
+                      ? (lang === 'ru' ? 'Сроки недоступны: выбран заказ без дедлайна (долгосрочное ожидание).' : 'Timeframes locked: "No Deadline" long-term expectation selected.')
+                      : (speedRate === 1.0 ? t.speedHelpModerate : t.speedHelpPriority)
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* No Deadline Toggle Control */}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wider text-[#ebd6f7]/75 mb-2 flex items-center gap-1">
+                  <span>{t.noDeadlineBtn}</span>
+                </label>
+                <button
+                  type="button"
+                  disabled={CURRENT_LOAD_STATUS === 2}
+                  onClick={() => setNoDeadline(prev => !prev)}
+                  className={`w-full px-5 py-4 rounded-xl font-bold transition-all flex items-center justify-between gap-3 shadow-lg border-2 ${
+                    CURRENT_LOAD_STATUS === 2
+                      ? 'bg-rose-950/30 text-rose-300/80 border-rose-500/20 cursor-not-allowed opacity-90'
+                      : noDeadline
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-400 shadow-[0_0_22px_rgba(52,211,153,0.3)] scale-[1.01] cursor-pointer active:scale-95'
+                      : 'bg-[#12051d] hover:bg-[#1d0b2e] text-[#ebd6f7] border-[#3d1a56] hover:border-emerald-400 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Clock className={`w-4.5 h-4.5 ${noDeadline ? 'text-emerald-300 animate-pulse' : 'text-stone-500'}`} />
+                    <span className="text-xs sm:text-sm uppercase tracking-widest font-black">
+                      {t.noDeadlineBtn}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {CURRENT_LOAD_STATUS !== 2 && (
+                      <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded border ${
+                        noDeadline 
+                          ? 'bg-[#12051d] text-emerald-300 border-emerald-400/40' 
+                          : 'bg-emerald-950/20 text-emerald-300/60 border-emerald-500/10'
+                      }`}>
+                        -15%
+                      </span>
+                    )}
+                    {noDeadline ? (
+                      <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded border-2 animate-pulse ${
+                        CURRENT_LOAD_STATUS === 2
+                          ? 'bg-[#12051d] text-rose-400 border-rose-500/40'
+                          : 'bg-[#12051d] text-emerald-400 border-emerald-400/80'
+                      }`}>
                         {lang === 'ru' ? 'АКТИВЕН' : 'ACTIVE'}
                       </span>
                     ) : (
@@ -3471,24 +3596,31 @@ export default function App() {
                   </div>
                 </button>
 
-                <div className="mt-3 bg-black/20 p-3 rounded-xl border border-white/5 text-xs sm:text-sm text-[#ebd6f7]/70 leading-relaxed font-medium">
-                  <strong className="text-purple-300">{t.speedHelpTitle}</strong>
+                <div className="mt-3 bg-black/20 p-3 rounded-xl border border-white/5 text-xs sm:text-sm text-[#ebd6f7]/70 leading-relaxed font-medium min-h-[90px]">
+                  <strong className={CURRENT_LOAD_STATUS === 2 ? 'text-rose-400' : 'text-emerald-300'}>
+                    {CURRENT_LOAD_STATUS === 2 ? (lang === 'ru' ? 'Режим обязателен' : 'Enforced mode') : t.noDeadlineBtn}
+                  </strong>
                   <p className="mt-1 font-sans text-[#ebd6f7]/90 font-semibold">
-                    {speedRate === 1.0 ? t.speedHelpModerate : t.speedHelpPriority}
+                    {t.noDeadlineDesc}
+                    {CURRENT_LOAD_STATUS === 2 && (
+                      <span className="block mt-1 text-rose-400 font-bold">
+                        {t.noDeadlineSurchargeNote}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
+            </div>
 
-              {/* Reveal math logs btn */}
-              <div className="text-right">
-                <button
-                  type="button"
-                  onClick={() => setShowLog(!showLog)}
-                  className="bg-[#12051d] hover:bg-[#1a0729] text-purple-300 text-sm font-mono border border-[#3d1a56] px-4 py-2.5 rounded-xl transition-all cursor-pointer font-bold shadow-inner"
-                >
-                  {t.calculationLogBtn} {showLog ? '▲' : '▼'}
-                </button>
-              </div>
+            {/* Reveal math logs button placed cleanly at the bottom */}
+            <div className="mt-6 pt-4 border-t border-[#ebd6f7]/5 text-right relative z-10">
+              <button
+                type="button"
+                onClick={() => setShowLog(!showLog)}
+                className="bg-[#12051d] hover:bg-[#1a0729] text-purple-300 text-sm font-mono border border-[#3d1a56] px-4 py-2.5 rounded-xl transition-all cursor-pointer font-bold shadow-inner"
+              >
+                {t.calculationLogBtn} {showLog ? '▲' : '▼'}
+              </button>
             </div>
 
             {/* Price Calculations output breakdown logs */}
@@ -3504,14 +3636,38 @@ export default function App() {
                     {t.calculationLogHeader}
                   </div>
                   <div className="bg-[#12051d] rounded-xl p-4 border border-[#3d1a56] text-[#ebd6f7]/90 max-h-72 overflow-y-auto leading-relaxed space-y-3 shadow-inner">
+                    {/* Active Queue parameters info */}
+                    <div className="pb-3 border-b border-[#3d1a56] text-purple-300 font-bold space-y-1 text-xs">
+                      <div className="uppercase tracking-wider text-[10px] text-[#ebd6f7]/55">{lang === 'ru' ? '● ТЕКУЩИЕ ПАРАМЕТРЫ ОЧЕРЕДИ:' : '● CURRENT QUEUE PARAMETERS:'}</div>
+                      <div className="text-[#ebd6f7]/80 pl-2">
+                        • {lang === 'ru' ? 'Статус загруженности:' : 'Queue workload status:'}{' '}
+                        <span className={CURRENT_LOAD_STATUS === 2 ? 'text-rose-400 font-black' : CURRENT_LOAD_STATUS === 1 ? 'text-yellow-400 font-black' : 'text-emerald-400 font-black'}>
+                          {CURRENT_LOAD_STATUS === 0 ? t.loadStatusFree : CURRENT_LOAD_STATUS === 1 ? t.loadStatusMedium : t.loadStatusFull}
+                        </span>
+                      </div>
+                      <div className="text-[#ebd6f7]/80 pl-2">
+                        • {lang === 'ru' ? 'Опция «Без дедлайна»:' : '"No Deadline" option:'}{' '}
+                        {noDeadline ? (
+                          <span className="text-emerald-400 font-black font-mono">
+                            {lang === 'ru' ? 'ВКЛЮЧЕНА (скидка -15% на весь заказ)' : 'ENABLED (-15% discount on entire order)'}
+                            {CURRENT_LOAD_STATUS === 2 && <span className="text-rose-400"> {lang === 'ru' ? '(ОТКЛЮЧЕНА из-за полной загрузки)' : '(DEACTIVATED under full workload)'}</span>}
+                          </span>
+                        ) : (
+                          <span className="text-stone-400 font-black">{lang === 'ru' ? 'ВЫКЛЮЧЕНА' : 'DISABLED'}</span>
+                        )}
+                      </div>
+                    </div>
+
                     {orderCalculations.itemsLogs.map((logLine, logIdx) => (
-                      <div key={logIdx} className="border-b border-white/5 pb-3 last:border-0 last:pb-0 whitespace-pre-wrap">
+                      <div key={logIdx} className="border-b border-white/5 pb-3 last:border-0 last:pb-0 whitespace-pre-wrap text-xs">
                         {logLine}
                       </div>
                     ))}
                                     <div className="pt-3 border-t border-white/10 text-purple-300 font-bold space-y-1">
                       <div>{lang === 'ru' ? 'Сумма позиций:' : 'Sum of items:'} {formatPrice(orderCalculations.baseTotalRounded)}</div>
-                      <div>{lang === 'ru' ? 'Множитель очереди:' : 'Queue rate multiplier:'} ×{speedRate}</div>
+                      {orderCalculations.actualSpeedRate !== 1.0 && (
+                        <div>{lang === 'ru' ? 'Множитель очереди:' : 'Queue rate multiplier:'} ×{orderCalculations.actualSpeedRate}</div>
+                      )}
                       {orderCalculations.hasBulkDiscount && (
                         <div className="text-emerald-400 font-extrabold animate-pulse">
                           {lang === 'ru' ? 'Оптовая скидка (накопительная):' : 'Wholesale discount (progressive):'} -{formatPrice(orderCalculations.bulkDiscountAmount)}
@@ -3522,34 +3678,34 @@ export default function App() {
                           {lang === 'ru' ? 'Наценка за превышение лимита (+1000%):' : 'Over-limit surcharge (+1000%):'} +{formatPrice(orderCalculations.surchargeAmount)}
                         </div>
                       )}
-
-                      {orderCalculations.hasBulkDiscount ? (
-                        <div className="pt-2 border-t border-white/5 space-y-1">
-                          <div className="text-stone-400 font-medium text-xs">
-                            {lang === 'ru' ? 'Стоимость без скидки:' : 'Price before discount:'}{' '}
-                            <span className="line-through font-mono">{formatPrice(orderCalculations.priceBeforeDiscountTotal)}</span>
-                          </div>
-                          <div className="text-emerald-400 text-base font-extrabold tracking-tight">
-                            {lang === 'ru' ? 'Итого со скидкой:' : 'Grand Total (with discount):'}{' '}
-                            <span className="text-xl font-display font-black font-mono block sm:inline">{formatPrice(orderCalculations.finalPriceRub)}</span>
-                          </div>
-                          <div className="text-fuchsia-300 font-bold text-xs pt-1">
-                            {lang === 'ru' ? 'Размер предоплаты:' : 'Prepayment size:'}{' '}
-                            <span className="font-mono">{formatPrice(orderCalculations.prepayAmountRub)} ({orderCalculations.prepayPercent}%)</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="pt-2 border-t border-white/5 space-y-1">
-                          <div className="text-purple-300 text-base font-black">
-                            {lang === 'ru' ? 'Итого:' : 'Grand Total:'}{' '}
-                            <span className="text-lg font-display font-mono">{formatPrice(orderCalculations.finalPriceRub)}</span>
-                          </div>
-                          <div className="text-fuchsia-300 font-bold text-xs pt-1">
-                            {lang === 'ru' ? 'Размер предоплаты:' : 'Prepayment size:'}{' '}
-                            <span className="font-mono">{formatPrice(orderCalculations.prepayAmountRub)} ({orderCalculations.prepayPercent}%)</span>
-                          </div>
+                      
+                      {/* Workload Status Surcharge */}
+                      {orderCalculations.loadMarkupAmount > 0 && (
+                        <div className={`font-extrabold ${CURRENT_LOAD_STATUS === 2 ? 'text-rose-400 animate-pulse' : 'text-yellow-400'}`}>
+                          {CURRENT_LOAD_STATUS === 2
+                            ? (lang === 'ru' ? 'Наценка за полную загруженность очереди (+35%):' : 'Surcharge for full queue workload (+35%):')
+                            : (lang === 'ru' ? 'Наценка за среднюю загруженность очереди (+25%):' : 'Surcharge for medium queue workload (+25%):')
+                          } +{formatPrice(orderCalculations.loadMarkupAmount)}
                         </div>
                       )}
+
+                      {/* No Deadline Discount (-15%) */}
+                      {orderCalculations.noDeadlineDiscountAmount > 0 && (
+                        <div className="text-emerald-400 font-extrabold animate-pulse">
+                          {lang === 'ru' ? 'Скидка за заказ без дедлайна (-15%):' : 'No Deadline discount (-15%):'} -{formatPrice(orderCalculations.noDeadlineDiscountAmount)}
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-white/5 space-y-1">
+                        <div className="text-emerald-400 text-base font-extrabold tracking-tight">
+                          {lang === 'ru' ? 'Итого к оплате:' : 'Grand Total:'}{' '}
+                          <span className="text-xl font-display font-black font-mono block sm:inline text-purple-300">{formatPrice(orderCalculations.finalPriceRub)}</span>
+                        </div>
+                        <div className="text-fuchsia-300 font-bold text-xs pt-1">
+                          {lang === 'ru' ? 'Размер предоплаты:' : 'Prepayment size:'}{' '}
+                          <span className="font-mono">{formatPrice(orderCalculations.prepayAmountRub)} ({orderCalculations.prepayPercent}%)</span>
+                        </div>
+                      </div>
 
                       {currency === 'usd' && (
                         <div className="text-stone-400 mt-1.5 font-semibold text-xs leading-relaxed border-t border-white/5 pt-1.5">
@@ -3585,6 +3741,60 @@ export default function App() {
                 </div>
               </motion.div>
             )}
+
+            {/* Workload Status Indicators near prices */}
+            <div className={`mt-8 p-4 rounded-2xl border-2 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg relative overflow-hidden z-10 ${
+              CURRENT_LOAD_STATUS === 0
+                ? 'bg-emerald-950/25 border-emerald-500/30 text-emerald-300'
+                : CURRENT_LOAD_STATUS === 1
+                ? 'bg-yellow-950/25 border-yellow-500/30 text-yellow-300'
+                : 'bg-rose-950/25 border-rose-500/30 text-rose-300'
+            }`}>
+              {/* background subtle glow */}
+              <div className={`absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl opacity-20 pointer-events-none ${
+                CURRENT_LOAD_STATUS === 0 ? 'bg-emerald-400' : CURRENT_LOAD_STATUS === 1 ? 'bg-yellow-400' : 'bg-rose-400'
+              }`} />
+              
+              <div className="flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full shrink-0 ${
+                  CURRENT_LOAD_STATUS === 0
+                    ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_#34d399]'
+                    : CURRENT_LOAD_STATUS === 1
+                    ? 'bg-yellow-400 animate-pulse shadow-[0_0_10px_#fbbf24]'
+                    : 'bg-rose-400 animate-pulse shadow-[0_0_10px_#f87171]'
+                }`}></span>
+                <div className="text-left">
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-[#ebd6f7]/60">
+                    {lang === 'ru' ? 'Активный статус исполнителя:' : 'Artist Load Status:'}
+                  </span>
+                  <span className="text-sm font-extrabold uppercase tracking-wide">
+                    {CURRENT_LOAD_STATUS === 0
+                      ? t.loadStatusFree
+                      : CURRENT_LOAD_STATUS === 1
+                      ? t.loadStatusMedium
+                      : t.loadStatusFull}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-xs sm:text-right font-sans font-semibold text-[#ebd6f7]/85 max-w-sm">
+                {CURRENT_LOAD_STATUS === 0 && (
+                  lang === 'ru' 
+                    ? 'Очередь свободна. Заказы выполняются в стандартном темпе.' 
+                    : 'The queue is free. Orders are processed at standard pace.'
+                )}
+                {CURRENT_LOAD_STATUS === 1 && (
+                  lang === 'ru' 
+                    ? 'Умеренная нагрузка. К стоимости применяется наценка +25%.' 
+                    : 'Moderate workload. A +25% markup is applied to the order.'
+                )}
+                {CURRENT_LOAD_STATUS === 2 && (
+                  lang === 'ru' 
+                    ? 'Очередь заполнена (+35% наценка). Доступен только заказ «Без дедлайна».' 
+                    : 'Queue is full (+35% surcharge). Only "No Deadline" orders accepted.'
+                )}
+              </div>
+            </div>
 
             {/* Results widgets box */}
             <div className="mt-8 pt-6 border-t border-[#ebd6f7]/15 grid grid-cols-1 sm:grid-cols-2 gap-5 text-center relative z-10">
@@ -3796,6 +4006,24 @@ export default function App() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {CURRENT_LOAD_STATUS === 2 && (
+              <div className="bg-rose-950/40 border-2 border-rose-500/30 rounded-2xl p-5 mb-6 text-left relative overflow-hidden z-10 flex items-start gap-3.5 shadow-lg">
+                <div className="bg-rose-500/20 text-rose-400 p-2 rounded-xl border border-rose-500/30 shrink-0">
+                  <span className="text-lg">⚡</span>
+                </div>
+                <div>
+                  <h4 className="text-rose-400 font-bold text-sm uppercase tracking-wider mb-1">
+                    {lang === 'ru' ? 'Режим полной загрузки' : 'Full Queue Enforced'}
+                  </h4>
+                  <p className="text-stone-300 text-xs sm:text-sm leading-relaxed font-sans font-semibold">
+                    {lang === 'ru' 
+                      ? 'В связи с высокой нагрузкой новые заказы принимаются исключительно в режиме «Без дедлайна» (долгосрочное ожидание) со скидкой -15%. Опция приоритета и стандартные сроки временно отключены.'
+                      : 'Due to extreme load, new orders are accepted exclusively under the "No Deadline" (long-term queue) policy with a -15% discount. Priority option and standard timeframes are temporarily locked.'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-6">
                 
@@ -4043,6 +4271,40 @@ export default function App() {
             <ArrowUpCircle className="w-4 h-4 animate-bounce" />
             <span>{lang === 'ru' ? 'На главную' : 'To Main Page'}</span>
           </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Elegant Custom Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className={`fixed bottom-12 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl border-2 shadow-2xl backdrop-blur-md max-w-sm ${
+              toast.type === 'success'
+                ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300 shadow-[0_0_25px_rgba(16,185,129,0.3)]'
+                : toast.type === 'error'
+                ? 'bg-rose-950/90 border-rose-500/50 text-rose-300 shadow-[0_0_25px_rgba(239,68,68,0.3)]'
+                : 'bg-purple-950/90 border-purple-500/50 text-purple-300 shadow-[0_0_25px_rgba(168,85,247,0.3)]'
+            }`}
+          >
+            <div className={`p-1.5 rounded-lg shrink-0 ${
+              toast.type === 'success' ? 'bg-emerald-500/20' : toast.type === 'error' ? 'bg-rose-500/20' : 'bg-purple-500/20'
+            }`}>
+              {toast.type === 'success' ? (
+                <Check className="w-5 h-5" />
+              ) : toast.type === 'error' ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Info className="w-5 h-5" />
+              )}
+            </div>
+            <p className="font-sans text-sm font-semibold leading-relaxed">
+              {toast.message}
+            </p>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

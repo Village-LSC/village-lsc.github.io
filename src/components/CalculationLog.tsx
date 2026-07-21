@@ -28,18 +28,8 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
   // Main toggle for collapsing/expanding the entire log container
   const [isLogOpen, setIsLogOpen] = useState<boolean>(false);
   
-  // Internal view mode: 'simple' (brief) vs 'detailed' (full step-by-step breakdown)
-  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('detailed');
-  
-  // Accordion expanded state per item in simple mode
-  const [expandedItems, setExpandedItems] = useState<{ [key: number]: boolean }>({});
-  
   // Toggle rule info drawer
   const [showRulesExplanation, setShowRulesExplanation] = useState<boolean>(false);
-
-  const toggleItem = (idx: number) => {
-    setExpandedItems(prev => ({ ...prev, [idx]: !prev[idx] }));
-  };
 
   const isRu = lang === 'ru';
 
@@ -103,8 +93,8 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
             <div className="bg-[#140620] border-2 border-[#3d1a56] rounded-3xl p-4 sm:p-7 shadow-2xl space-y-6 mt-2 relative">
               <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/5 rounded-full blur-3xl pointer-events-none" />
 
-              {/* View Mode Toggle Header */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#3d1a56] pb-5">
+              {/* Header Title */}
+              <div className="border-b border-[#3d1a56] pb-5">
                 <div>
                   <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-wider flex items-center gap-2.5">
                     <FileText className="w-5 h-5 text-fuchsia-400" />
@@ -115,31 +105,6 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                       ? 'Полная выкладка формул, очков сложности и наценок' 
                       : 'Complete breakdown of formulas, complexity points, and markups'}
                   </p>
-                </div>
-
-                <div className="flex items-center gap-2 bg-[#12051d] p-1.5 rounded-2xl border border-[#3d1a56] w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('simple')}
-                    className={`flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
-                      viewMode === 'simple'
-                        ? 'bg-purple-600 text-white shadow-lg'
-                        : 'text-[#ebd6f7]/70 hover:text-white hover:bg-purple-900/30'
-                    }`}
-                  >
-                    {isRu ? 'Упрощённый' : 'Simple'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('detailed')}
-                    className={`flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
-                      viewMode === 'detailed'
-                        ? 'bg-fuchsia-600 text-white shadow-lg'
-                        : 'text-[#ebd6f7]/70 hover:text-white hover:bg-fuchsia-900/30'
-                    }`}
-                  >
-                    {isRu ? 'Проработанный' : 'Detailed'}
-                  </button>
                 </div>
               </div>
 
@@ -375,7 +340,6 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                   </div>
                 ) : (
                   orderCalculations.rawItems.map((item: any, idx: number) => {
-                    const isExpanded = expandedItems[idx] || viewMode === 'detailed';
                     const baseCat = CATEGORIES_LIST.find(c => c.id === item.categoryId);
                     const basePrice = baseCat?.basePrice || 0;
                     const hasDiscounts = item.itemBulkDiscountAmount > 0;
@@ -391,10 +355,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                       >
                         {/* Header Item Banner */}
                         <div
-                          onClick={() => viewMode === 'simple' && toggleItem(idx)}
-                          className={`p-4 sm:p-5 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center ${
-                            viewMode === 'simple' ? 'cursor-pointer hover:bg-[#200933]' : ''
-                          }`}
+                          className="p-4 sm:p-5 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center"
                         >
                           <div className="flex items-center gap-3.5">
                             <div className="bg-purple-900/60 text-purple-200 font-black text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-purple-500/30 font-mono">
@@ -412,7 +373,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                                   </span>
                                 )}
                                 {item.isometry && (
-                                  <span className="text-xs uppercase font-mono font-bold px-2 py-0.5 rounded bg-fuchsia-950 text-fuchsia-300 border border-fuchsia-500/30">
+                                  <span className="text-xs uppercase font-mono font-bold px-2.5 py-0.5 rounded bg-fuchsia-950 text-fuchsia-300 border border-fuchsia-500/30">
                                     {isRu ? 'Изометрия (+50%)' : 'Isometric (+50%)'}
                                   </span>
                                 )}
@@ -441,27 +402,11 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                                 {formatPrice(item.itemFinalPrice)}
                               </span>
                             </div>
-
-                            {viewMode === 'simple' && (
-                              <button
-                                type="button"
-                                className="text-purple-400 hover:text-white transition-colors bg-[#2d143f] p-2.5 rounded-xl"
-                              >
-                                {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                              </button>
-                            )}
                           </div>
                         </div>
 
                         {/* Detailed Formula Breakdown Drawer */}
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="border-t border-[#3d1a56]/80 bg-[#11041b]"
-                            >
+                        <div className="border-t border-[#3d1a56]/80 bg-[#11041b]">
                               <div className="p-4 sm:p-6 space-y-6 text-xs sm:text-sm font-sans">
                                 
                                 {/* Step-by-Step Explicit Calculation Flow */}
@@ -613,9 +558,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                                 </div>
 
                               </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                          </div>
                       </motion.div>
                     );
                   })

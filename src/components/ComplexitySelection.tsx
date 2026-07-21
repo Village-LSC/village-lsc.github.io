@@ -385,8 +385,9 @@ export function ComplexitySelection({ value, onChange, lang, spriteId, categoryI
           {lang === 'ru' ? 'Уровень сложности / деталей:' : 'Complexity / Detail Level:'}
         </label>
         
-        <span className="text-[10.5px] font-medium text-purple-300/60 font-mono">
-          {lang === 'ru' ? 'Нажмите для изменения уровня' : 'Click to change quality level'}
+        <span className="text-[13px] font-black text-fuchsia-200 flex items-center gap-2 bg-purple-900/60 px-3 py-1 rounded-md border border-purple-400/40 shadow-[0_0_10px_rgba(217,70,239,0.2)]">
+          <span className="w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse shadow-[0_0_8px_#d946ef]" />
+          {lang === 'ru' ? 'Переключаемая кнопка (нажмите)' : 'Toggle button (click to cycle)'}
         </span>
       </div>
  

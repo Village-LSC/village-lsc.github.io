@@ -1528,13 +1528,18 @@ export default function App() {
         animComplexity = sprite.animComplexity || 'simple';
         animPoints = animComplexity === 'complex' ? 10 : animComplexity === 'medium' ? 5 : 0;
         
-        if (animComplexity === 'complex') {
-          framePoints = Math.ceil(frames / 2);
-        } else if (animComplexity === 'medium') {
-          framePoints = Math.ceil(frames / 4);
-        } else {
-          framePoints = Math.ceil(frames / 6);
+        // Dynamic frame multiplier based on sprite quality and animation complexity
+        let frameMultiplier = 1;
+        if (detailLevel === 'simple') {
+          frameMultiplier = animComplexity === 'complex' ? 0.75 : animComplexity === 'medium' ? 0.5 : 0.25;
+        } else if (detailLevel === 'moderate') {
+          frameMultiplier = animComplexity === 'complex' ? 1.5 : animComplexity === 'medium' ? 1.0 : 0.75;
+        } else { // detailed
+          frameMultiplier = animComplexity === 'complex' ? 2.0 : animComplexity === 'medium' ? 1.5 : 1.0;
         }
+        
+        framePoints = Math.round(frames * frameMultiplier);
+        (sprite as any).calculatedFrameMultiplier = frameMultiplier; // Store for log
       }
 
       baseGeneralComplexity = detailPoints + animPoints + framePoints;
@@ -1772,10 +1777,9 @@ export default function App() {
         
         if (s.hasAnimation) {
           const animLvlLabel = res.animComplexity === 'complex' ? 'Complex (+10)' : res.animComplexity === 'medium' ? 'Medium (+5)' : 'Simple (0)';
-          const animMultiplier = res.animComplexity === 'complex' ? 1.5 : res.animComplexity === 'medium' ? 1.0 : 0.5;
-          const animDivider = res.animComplexity === 'complex' ? 2 : res.animComplexity === 'medium' ? 4 : 6;
+          const frameMult = (s as any).calculatedFrameMultiplier || (res.animComplexity === 'complex' ? 2 : res.animComplexity === 'medium' ? 1.5 : 1);
           itemLog += `     - Animation Style: ${animLvlLabel}\n`;
-          itemLog += `     - Frame count: ${res.frames} frames / ${animDivider} = +${Math.ceil(res.frames / animDivider)}\n`;
+          itemLog += `     - Frame count: ${res.frames} frames × ${frameMult} = +${Math.round(res.frames * frameMult)}\n`;
         }
         
         itemLog += `   • Dimensional Complexity: sqrt(${s.width}×${s.height}) = ${res.sizeFactor} px size factor\n`;
@@ -3730,32 +3734,34 @@ export default function App() {
                                       </button>
                                     </div>
                                   </div>
+                                </div>
+
+                                <div className="mt-2 sm:mt-3.5 pt-1.5 sm:pt-2.5 border-t border-purple-500/5 flex items-center justify-between text-xs sm:text-sm font-mono">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[#ebd6f7]/40 uppercase tracking-wider font-bold truncate max-w-[70px] sm:max-w-none">
+                                      {sprite.designMode === 'scratch' ? (lang === 'ru' ? 'С нуля' : 'From Scratch') : (lang === 'ru' ? 'Референс' : 'Reference')}
+                                    </span>
+                                    <span className={`font-black shrink-0 ${sprite.designMode === 'scratch' ? 'text-purple-400' : 'text-stone-500'}`}>
+                                      {sprite.designMode === 'scratch' ? '+50%' : '0%'}
+                                    </span>
+                                  </div>
 
                                   {/* Custom Switch Toggle */}
                                   <div
-                                    className={`relative w-11 h-6 sm:w-14 sm:h-8 rounded-full transition-all duration-300 shrink-0 ${
+                                    className={`relative w-10 h-5 sm:w-12 sm:h-7 rounded-full transition-all duration-300 shrink-0 ${
                                       sprite.designMode === 'scratch'
-                                        ? 'bg-purple-600 shadow-[0_0_14px_rgba(147,51,234,0.5)]'
+                                        ? 'bg-purple-600 shadow-[0_0_12px_rgba(147,51,234,0.5)]'
                                         : 'bg-[#0f0418] border border-purple-500/15'
                                     }`}
                                   >
                                     <div
-                                      className={`absolute top-1 left-1 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-white transition-transform duration-300 shadow-md ${
+                                      className={`absolute top-0.5 left-0.5 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-white transition-transform duration-300 shadow-md ${
                                         sprite.designMode === 'scratch' 
-                                          ? 'translate-x-5 sm:translate-x-6' 
+                                          ? 'translate-x-5 sm:translate-x-5' 
                                           : 'translate-x-0'
                                       }`}
                                     />
                                   </div>
-                                </div>
-
-                                <div className="mt-2 sm:mt-3.5 pt-1.5 sm:pt-2.5 border-t border-purple-500/5 flex items-center justify-between text-xs sm:text-sm font-mono">
-                                  <span className="text-[#ebd6f7]/40 uppercase tracking-wider font-bold truncate max-w-[70px] sm:max-w-none">
-                                    {sprite.designMode === 'scratch' ? (lang === 'ru' ? 'С нуля' : 'From Scratch') : (lang === 'ru' ? 'Референс' : 'Reference')}
-                                  </span>
-                                  <span className={`font-black shrink-0 ${sprite.designMode === 'scratch' ? 'text-purple-400' : 'text-stone-500'}`}>
-                                    {sprite.designMode === 'scratch' ? '+50%' : '0%'}
-                                  </span>
                                 </div>
                               </div>
 
@@ -3791,32 +3797,34 @@ export default function App() {
                                       </button>
                                     </div>
                                   </div>
+                                </div>
+
+                                <div className="mt-2 sm:mt-3.5 pt-1.5 sm:pt-2.5 border-t border-purple-500/5 flex items-center justify-between text-xs sm:text-sm font-mono">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[#ebd6f7]/40 uppercase tracking-wider font-bold truncate max-w-[70px] sm:max-w-none">
+                                      {sprite.isometry ? (lang === 'ru' ? 'Изо: Да' : 'Iso: Yes') : (lang === 'ru' ? 'Изо: Нет' : 'Iso: No')}
+                                    </span>
+                                    <span className={`font-black shrink-0 ${sprite.isometry ? 'text-purple-400' : 'text-stone-500'}`}>
+                                      {sprite.isometry ? '+50%' : '0%'}
+                                    </span>
+                                  </div>
 
                                   {/* Custom Switch Toggle */}
                                   <div
-                                    className={`relative w-11 h-6 sm:w-14 sm:h-8 rounded-full transition-all duration-300 shrink-0 ${
+                                    className={`relative w-10 h-5 sm:w-12 sm:h-7 rounded-full transition-all duration-300 shrink-0 ${
                                       sprite.isometry
-                                        ? 'bg-purple-600 shadow-[0_0_14px_rgba(147,51,234,0.5)]'
+                                        ? 'bg-purple-600 shadow-[0_0_12px_rgba(147,51,234,0.5)]'
                                         : 'bg-[#0f0418] border border-purple-500/15'
                                     }`}
                                   >
                                     <div
-                                      className={`absolute top-1 left-1 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-white transition-transform duration-300 shadow-md ${
+                                      className={`absolute top-0.5 left-0.5 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-white transition-transform duration-300 shadow-md ${
                                         sprite.isometry 
-                                          ? 'translate-x-5 sm:translate-x-6' 
+                                          ? 'translate-x-5 sm:translate-x-5' 
                                           : 'translate-x-0'
                                       }`}
                                     />
                                   </div>
-                                </div>
-
-                                <div className="mt-2 sm:mt-3.5 pt-1.5 sm:pt-2.5 border-t border-purple-500/5 flex items-center justify-between text-xs sm:text-sm font-mono">
-                                  <span className="text-[#ebd6f7]/40 uppercase tracking-wider font-bold truncate max-w-[70px] sm:max-w-none">
-                                    {sprite.isometry ? (lang === 'ru' ? 'Изо: Да' : 'Iso: Yes') : (lang === 'ru' ? 'Изо: Нет' : 'Iso: No')}
-                                  </span>
-                                  <span className={`font-black shrink-0 ${sprite.isometry ? 'text-purple-400' : 'text-stone-500'}`}>
-                                    {sprite.isometry ? '+50%' : '0%'}
-                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -4163,14 +4171,18 @@ export default function App() {
                 </label>
                 <button
                   type="button"
-                  disabled={noDeadline}
-                  onClick={() => setSpeedRate(prev => prev === 1.0 ? 1.25 : 1.0)}
-                  className={`w-full px-5 py-4 rounded-xl font-bold transition-all flex items-center justify-between gap-3 shadow-lg border-2 ${
-                    noDeadline
-                      ? 'bg-[#12051d]/40 text-[#ebd6f7]/40 border-[#3d1a56]/40 cursor-not-allowed opacity-50'
-                      : speedRate === 1.25
-                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border-purple-400 shadow-[0_0_22px_rgba(192,132,252,0.45)] scale-[1.01] cursor-pointer active:scale-95'
-                      : 'bg-[#12051d] hover:bg-[#1d0b2e] text-[#ebd6f7] border-[#3d1a56] hover:border-purple-400 cursor-pointer active:scale-95'
+                  onClick={() => {
+                    if (speedRate === 1.25) {
+                      setSpeedRate(1.0);
+                    } else {
+                      setSpeedRate(1.25);
+                      setNoDeadline(false);
+                    }
+                  }}
+                  className={`w-full px-5 py-4 rounded-xl font-bold transition-all flex items-center justify-between gap-3 shadow-lg border-2 cursor-pointer active:scale-95 ${
+                    speedRate === 1.25
+                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border-purple-400 shadow-[0_0_22px_rgba(192,132,252,0.45)] scale-[1.01]'
+                      : 'bg-[#12051d] hover:bg-[#1d0b2e] text-[#ebd6f7] border-[#3d1a56] hover:border-purple-400'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -4218,7 +4230,16 @@ export default function App() {
                 <button
                   type="button"
                   disabled={CURRENT_LOAD_STATUS === 2}
-                  onClick={() => setNoDeadline(prev => !prev)}
+                  onClick={() => {
+                    if (CURRENT_LOAD_STATUS !== 2) {
+                      if (noDeadline) {
+                        setNoDeadline(false);
+                      } else {
+                        setNoDeadline(true);
+                        setSpeedRate(1.0);
+                      }
+                    }
+                  }}
                   className={`w-full px-5 py-4 rounded-xl font-bold transition-all flex items-center justify-between gap-3 shadow-lg border-2 ${
                     CURRENT_LOAD_STATUS === 2
                       ? 'bg-rose-950/30 text-rose-300/80 border-rose-500/20 cursor-not-allowed opacity-90'

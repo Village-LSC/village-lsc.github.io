@@ -586,8 +586,8 @@ export function AnimationComplexitySelection({
                 </div>
                 <p className="text-xs text-stone-300 leading-relaxed font-sans">
                   {lang === 'ru' 
-                    ? 'Баллы за анимацию всегда прибавляются строго целыми числами (без дробных значений). Кадры накапливают прогресс, и при достижении каждых полных 1.0 баллов начисляется +1 к сложности.'
-                    : 'Animation points are strictly added as whole integers (no fractional values). Frames accumulate progress, and every full 1.0 points earned awards +1 to complexity.'}
+                    ? 'Баллы за анимацию рассчитываются как количество кадров × ставка сложности с округлением до ближайшего целого числа (минимум +1 балл при включённой анимации).'
+                    : 'Animation points are calculated as frame count × complexity rate rounded to the nearest integer (minimum +1 point when animation is active).'}
                 </p>
               </div>
 

@@ -14,7 +14,14 @@ interface CalculatedState {
   baseTotalComplexity: number;
   totalComplexityMultiplier: number;
   framePoints?: number;
+  isoPoints?: number;
+  stylePoints?: number;
   frames?: number;
+  staticCap?: number;
+  rawStaticPoints?: number;
+  cappedStaticPoints?: number;
+  detailPoints?: number;
+  designPoints?: number;
 }
 
 interface SpriteState {
@@ -49,8 +56,8 @@ export function TotalComplexityCard({ calculated, sprite, lang }: TotalComplexit
         textColor: 'text-red-400 font-black tracking-widest uppercase animate-pulse',
         labelEn: 'Maximum',
         labelRu: 'Максимальная',
-        descEn: 'You have exceeded complexity limits! Now each complexity point adds 100% to the order cost! It is strongly discouraged to order above 100 complexity!',
-        descRu: 'Вы превысили лимиты сложности, теперь каждое очко сложности прибавляет 100% к стоимости заказа! Крайне не рекомендуется заказывать выше 100 сложности!',
+        descEn: 'You have exceeded complexity limits! Now each complexity point adds 50% to the order cost! It is strongly discouraged to order above 100 complexity!',
+        descRu: 'Вы превысили лимиты сложности, теперь каждое очко сложности прибавляет 50% к стоимости заказа! Крайне не рекомендуется заказывать выше 100 сложности!',
         IconComponent: Settings,
         gradientBg: 'linear-gradient(270deg, rgba(239, 68, 68, 0.45) 0%, rgba(244, 63, 94, 0.22) 50%, rgba(239, 68, 68, 0.05) 80%, transparent 100%)',
         colorHex: '#ef4444',
@@ -276,14 +283,9 @@ export function TotalComplexityCard({ calculated, sprite, lang }: TotalComplexit
 
               {/* Breakdown pill tags */}
               <div className="flex flex-wrap gap-2 mt-4 pt-3.5 border-t border-[#ebd6f7]/15">
-                {sprite.categoryId === '7' && (
-                  <span className="text-xs font-mono font-extrabold bg-purple-950/90 text-purple-100 border border-purple-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(168,85,247,0.25)] transition-all drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
-                    {lang === 'ru' ? `Скин ${sprite.skinType === '2' ? '128x128 HD' : '64x64'}` : `Skin ${sprite.skinType === '2' ? '128x128 HD' : '64x64'}`}
-                  </span>
-                )}
-                {getQualityPoints(sprite.categoryId, calculated.detailLevel) > 0 && (
+                {(calculated.detailPoints ?? 0) > 0 && (
                   <span className="text-xs font-mono font-extrabold bg-emerald-950/90 text-emerald-100 border border-emerald-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(16,185,129,0.25)] transition-all drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
-                    {lang === 'ru' ? `Детализация: +${getQualityPoints(sprite.categoryId, calculated.detailLevel)}` : `Detailing: +${getQualityPoints(sprite.categoryId, calculated.detailLevel)}`}
+                    {lang === 'ru' ? `Детализация: +${calculated.detailPoints} PTS` : `Detailing: +${calculated.detailPoints} PTS`}
                   </span>
                 )}
                 {sprite.hasAnimation && (
@@ -293,24 +295,23 @@ export function TotalComplexityCard({ calculated, sprite, lang }: TotalComplexit
                       : `Animation (${calculated.animComplexity === 'complex' ? '1.0' : calculated.animComplexity === 'medium' ? '0.5' : '0.25'} pts/frame): +${calculated.framePoints ?? 0}`}
                   </span>
                 )}
-                {calculated.dimensionalComplexity > 0 && (
-                  <span className="text-xs font-mono font-extrabold bg-sky-950/90 text-sky-100 border border-sky-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(14,165,233,0.25)] transition-all drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
-                    {lang === 'ru' ? `Размеры: +${calculated.dimensionalComplexity}` : `Dimensions: +${calculated.dimensionalComplexity}`}
-                  </span>
-                )}
                 {sprite.styleMode === 'specific' && (
                   <span className="text-xs font-mono font-extrabold bg-purple-950/90 text-purple-100 border border-purple-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(168,85,247,0.25)] transition-all drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
-                    {lang === 'ru' ? `Стиль (+25% сложн.): ${sprite.styleName || 'Определённый'}` : `Style (+25% comp.): ${sprite.styleName || 'Specific'}`}
+                    {lang === 'ru'
+                      ? `Стиль (+30% сложн.): +${calculated.stylePoints ?? 0} PTS`
+                      : `Style (+30% comp.): +${calculated.stylePoints ?? 0} PTS`}
                   </span>
                 )}
                 {sprite.designMode === 'scratch' && (
                   <span className="text-xs font-mono font-extrabold bg-amber-950/90 text-amber-100 border border-amber-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(245,158,11,0.25)] transition-all drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
-                    {lang === 'ru' ? 'Дизайн с нуля (+25% к цене)' : 'Scratch (+25% price)'}
+                    {lang === 'ru' ? `Дизайн с нуля (+${calculated.designPoints ?? 10} PTS)` : `Scratch (+${calculated.designPoints ?? 10} PTS)`}
                   </span>
                 )}
-                {sprite.isometry && (
+                {sprite.isometry && sprite.categoryId !== '7' && sprite.categoryId !== '2' && (
                   <span className="text-xs font-mono font-extrabold bg-fuchsia-950/90 text-fuchsia-100 border border-fuchsia-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(217,70,239,0.25)] transition-all drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
-                    {lang === 'ru' ? 'Объёмная перспектива (+50% сложн.)' : 'Volumetric Perspective (+50% comp.)'}
+                    {lang === 'ru'
+                      ? `Перспектива 3D (+50% сложн.): +${calculated.isoPoints ?? 0} PTS`
+                      : `Perspective 3D (+50% comp.): +${calculated.isoPoints ?? 0} PTS`}
                   </span>
                 )}
               </div>

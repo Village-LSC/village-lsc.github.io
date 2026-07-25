@@ -28,10 +28,25 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
   const safeH = Math.max(1, height);
   const aspectRatio = safeW / safeH;
 
+  // Calculate physical canvas scale factor based on resolution
+  const maxDim = Math.max(safeW, safeH);
+  let resolutionScale = 1.0;
+  if (maxDim <= 16) {
+    resolutionScale = 0.45;
+  } else if (maxDim <= 32) {
+    resolutionScale = 0.65;
+  } else if (maxDim <= 64) {
+    resolutionScale = 0.8;
+  } else if (maxDim <= 128) {
+    resolutionScale = 0.95;
+  } else {
+    resolutionScale = 1.0;
+  }
+
   // Container dimensions
-  const containerHeight = 130;
-  const maxContainerW = 280;
-  const maxContainerH = containerHeight - 16; // some padding space
+  const containerHeight = 240;
+  const maxContainerW = 320;
+  const maxContainerH = containerHeight - 20; // some padding space
 
   // Base optimal fit dimensions for widget
   let baseW = maxContainerW;
@@ -42,9 +57,9 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
     baseW = baseH * aspectRatio;
   }
 
-  // Apply zoom factor
-  const drawW = Math.round(baseW * zoom);
-  const drawH = Math.round(baseH * zoom);
+  // Apply zoom factor and resolution scale
+  const drawW = Math.round(baseW * resolutionScale * zoom);
+  const drawH = Math.round(baseH * resolutionScale * zoom);
 
   // Calculate cell sizes based on resolution
   const cellW = drawW / safeW;
@@ -75,8 +90,8 @@ export function CanvasSizePreview({ width, height, lang }: CanvasSizePreviewProp
     modalBaseW = modalBaseH * aspectRatio;
   }
 
-  const modalDrawW = Math.round(modalBaseW * modalZoom);
-  const modalDrawH = Math.round(modalBaseH * modalZoom);
+  const modalDrawW = Math.round(modalBaseW * resolutionScale * modalZoom);
+  const modalDrawH = Math.round(modalBaseH * resolutionScale * modalZoom);
 
   // Calculate cell sizes based on resolution for the modal
   const modalCellW = modalDrawW / safeW;

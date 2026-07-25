@@ -159,8 +159,8 @@ const STEPS: StepDefinition[] = [
         targetId: 'tour-style-select',
         titleRu: '3.2 Специфический стиль / Палитра',
         titleEn: '3.2 Target Style & Specific Palette',
-        contentRu: 'При необходимости попадания в строгий стиль проекта (например, стилистика Terraria, Stardew Valley, Hotline Miami) выберите "Определённый стиль" (+25% к очкам сложности).',
-        contentEn: 'If matching a strict external game style (e.g. Terraria, Stardew Valley) is required, select "Specific Style" (+25% score boost).',
+        contentRu: 'При необходимости попадания в строгий стиль проекта (например, стилистика Terraria, Stardew Valley, Hotline Miami) выберите "Определённый стиль" (+30% к очкам сложности).',
+        contentEn: 'If matching a strict external game style (e.g. Terraria, Stardew Valley) is required, select "Specific Style" (+30% score boost).',
         actionHintRu: 'Кликните карточку выбора стиля',
         actionHintEn: 'Click on style selection card'
       },

@@ -1478,16 +1478,17 @@ export default function App() {
 
   // Pixel step table based on General Complexity (GC) and preferred size limit (maxBaseSize)
   const getPixelStepForGeneralComplexity = (gc: number, maxBaseSize: number): number => {
-    const maxStep = maxBaseSize / 8;
-    const minStep = Math.max(4, Math.min(8, Math.round(maxStep * 0.15)));
+    // Decreased step size by 50% (previously decreased by 25%)
+    const maxStep = (maxBaseSize / 12) * 0.375;
+    const minStep = Math.max(1, Math.min(3, maxStep * 0.15));
     
-    if (gc < 4) return Math.round(maxStep);
-    if (gc >= 24) return Math.round(minStep);
+    if (gc < 4) return Math.max(1, Math.round(maxStep));
+    if (gc >= 24) return Math.max(1, Math.round(minStep));
     
     // Linear interpolation factor between 0.0 (at gc = 3) and 1.0 (at gc = 24)
     const ratio = (gc - 3) / 21;
     const stepValue = maxStep - ratio * (maxStep - minStep);
-    return Math.round(stepValue);
+    return Math.max(1, Math.round(stepValue));
   };
 
   // Complexity Category name
@@ -1512,48 +1513,91 @@ export default function App() {
     let sizeFactor = 0;
     let sizeInfo = '';
     let baseDiscountPercent = 0;
+    let canvasScale = 1.0;
     
+    // Standard resolution sizing size factor (works for all categories including skins)
     if (sprite.categoryId === '7') {
-      // Minecraft Skin specific pricing (stays fixed at standard/HD rate)
-      const skinMult = sprite.skinType === '2' ? 2 : 1;
-      baseCalculatedPrice = cat.basePrice * skinMult;
-      sizeInfo = sprite.skinType === '2' ? t.hdText : t.standardText;
-      sizeFactor = sprite.skinType === '2' ? 128 : 64;
+      const isHD = sprite.skinType === '2';
+      sizeFactor = isHD ? 128 : 64;
+      sizeInfo = isHD ? '128×128 px (HD)' : '64×64 px (Standard)';
+      const minSize = cat.minBaseSize || 64;
+      const rawScale = Math.pow((sizeFactor * sizeFactor) / (minSize * minSize), 0.35);
+      canvasScale = isHD ? rawScale * 1.15 : rawScale;
+      baseCalculatedPrice = Math.round(Math.max(cat.basePrice * canvasScale, 150));
+      baseDiscountPercent = 0;
     } else {
-      // Standard resolution sizing size factor
       const w = Math.max(1, sprite.width);
       const h = Math.max(1, sprite.height);
       sizeFactor = Math.round(Math.sqrt(w * h));
       sizeInfo = `${w}×${h} px`;
       
-      // If the selected size is strictly less than the category minimum size, the base price is reduced dynamically:
-      // The smaller the size, the bigger the discount (up to 80% max discount)
-      if (cat.minBaseSize && sizeFactor < cat.minBaseSize) {
-        const discountRatio = 1 - (sizeFactor / cat.minBaseSize);
-        baseDiscountPercent = Math.max(0, Math.min(80, Math.round(discountRatio * 80)));
-        baseCalculatedPrice = Math.round(cat.basePrice * (1 - baseDiscountPercent / 100));
+      const minSize = cat.minBaseSize || 16;
+      canvasScale = Math.pow((w * h) / (minSize * minSize), 0.35);
+      baseCalculatedPrice = Math.round(Math.max(cat.basePrice * canvasScale, 150));
+      
+      if (canvasScale < 1.0) {
+        baseDiscountPercent = Math.max(0, Math.min(80, Math.round((1 - canvasScale) * 100)));
+      } else {
+        baseDiscountPercent = 0;
       }
     }
 
-    // Complexity score calculation
-    let generalComplexity = 0;
-    let baseGeneralComplexity = 0;
-    let detailLevel: 'simple' | 'moderate' | 'detailed' = 'simple';
-    let animComplexity: 'simple' | 'medium' | 'complex' = 'simple';
-    let designMode: 'reference' | 'scratch' = 'reference';
-    let styleMode: 'free' | 'specific' = 'free';
-    let styleName = '';
-    let isometry = false;
+    // Complexity score calculation strictly from quality level & option toggles
+    const detailLevel = sprite.detailLevel || (sprite.quality === 'best' ? 'detailed' : sprite.quality === 'medium' ? 'moderate' : 'simple');
+    const detailPointsRaw = getQualityPoints(sprite.categoryId, detailLevel);
+    
+    const designMode = sprite.designMode || 'reference';
+    const styleMode = sprite.styleMode || 'free';
+    const styleName = sprite.styleName || '';
+    const isometry = (sprite.categoryId === '7' || sprite.categoryId === '2') ? false : (sprite.isometry || false);
+
+    const designPointsRaw = designMode === 'scratch' ? 10 : 0;
+
+    // Standard static complexity components (unscaled)
+    const baseBeforeStyleRaw = detailPointsRaw + designPointsRaw;
+    const stylePointsRaw = styleMode === 'specific' ? Math.max(1, Math.round(baseBeforeStyleRaw * 0.30)) : 0;
+    const baseBeforeIsoRaw = detailPointsRaw + designPointsRaw + stylePointsRaw;
+    const isoPointsRaw = (isometry && sprite.categoryId !== '7' && sprite.categoryId !== '2') ? Math.round(baseBeforeIsoRaw * 0.5) : 0;
+
+    // Dynamic static complexity scale based on canvas resolution vs category standard resolution (cat.minBaseSize):
+    // For smaller resolutions, complexity points are scaled down proportionally, up to a dynamic cap.
+    const stdSize = cat.minBaseSize || 32;
+    const sizeRatio = Math.max(0, Math.min(1, sizeFactor / stdSize));
+    const staticCap = Math.round(40 + 60 * sizeRatio);
+    const scaleFactor = staticCap / 100;
+
+    // Scaled-down complexity point contributions
+    let detailPoints = Math.round(detailPointsRaw * scaleFactor);
+    let designPoints = Math.round(designPointsRaw * scaleFactor);
+    let stylePoints = Math.round(stylePointsRaw * scaleFactor);
+    let isoPoints = Math.round(isoPointsRaw * scaleFactor);
+
+    const rawStaticPoints = detailPointsRaw + designPointsRaw + stylePointsRaw + isoPointsRaw;
+    let cappedStaticPoints = detailPoints + designPoints + stylePoints + isoPoints;
+    
+    if (cappedStaticPoints > staticCap) {
+      // Adjust components down to sum up exactly to staticCap
+      let diff = cappedStaticPoints - staticCap;
+      while (diff > 0) {
+        if (detailPoints >= isoPoints && detailPoints >= stylePoints && detailPoints >= designPoints && detailPoints > 0) {
+          detailPoints--;
+        } else if (isoPoints >= detailPoints && isoPoints >= stylePoints && isoPoints >= designPoints && isoPoints > 0) {
+          isoPoints--;
+        } else if (stylePoints >= detailPoints && stylePoints >= isoPoints && stylePoints >= designPoints && stylePoints > 0) {
+          stylePoints--;
+        } else if (designPoints >= detailPoints && designPoints >= isoPoints && designPoints >= stylePoints && designPoints > 0) {
+          designPoints--;
+        } else {
+          break;
+        }
+        diff--;
+      }
+      cappedStaticPoints = detailPoints + designPoints + stylePoints + isoPoints;
+    }
+    
+    // Animation frame calculation and modifier: gives complexity points (PTS) based on frames and complexity level
     let frames = 1;
     let animModeLogText = t.standardText;
-
-    // Isometry is not applicable to Minecraft skins (3D by nature)
-    isometry = sprite.categoryId === '7' ? false : (sprite.isometry || false);
-    designMode = sprite.designMode || 'reference';
-    styleMode = sprite.styleMode || 'free';
-    styleName = sprite.styleName || '';
-
-    let animPoints = 0;
     let framePoints = 0;
 
     if (sprite.hasAnimation && cat.supportsAnimation) {
@@ -1566,60 +1610,37 @@ export default function App() {
         frames = Math.max(1, Math.round(duration / delay));
         animModeLogText = `${t.animMethodCalc}: ${duration}s / ${delay}s = ${frames} ${t.tzFrames}`;
       }
-
-      animComplexity = sprite.animComplexity || 'simple';
-      animPoints = 0;
       
-      const ratePerFrame = animComplexity === 'complex' ? 1.0 : animComplexity === 'medium' ? 0.5 : 0.25;
-      framePoints = Math.floor(frames * ratePerFrame);
-      (sprite as any).calculatedFrameMultiplier = ratePerFrame; // Store rate for log
+      const animComp = sprite.animComplexity || 'simple';
+      const animRate = animComp === 'complex' ? 1.0 : (animComp === 'medium' ? 0.5 : 0.25);
+      framePoints = Math.floor(frames * animRate);
     }
 
-    detailLevel = sprite.detailLevel || (sprite.quality === 'best' ? 'detailed' : sprite.quality === 'medium' ? 'moderate' : 'simple');
-    const detailPoints = getQualityPoints(sprite.categoryId, detailLevel);
-
-    baseGeneralComplexity = detailPoints + animPoints + framePoints;
-    
-    let generalMultiplier = 1.0;
-    if (styleMode === 'specific') generalMultiplier += 0.25;
-    if (isometry && sprite.categoryId !== '7') generalMultiplier += 0.5;
-    generalComplexity = Math.round(baseGeneralComplexity * generalMultiplier);
-
-    let dimensionalComplexity = 0;
-    let step = 16;
-    if (sprite.categoryId !== '7') {
-      step = getPixelStepForGeneralComplexity(baseGeneralComplexity, cat.maxBaseSize);
-      dimensionalComplexity = Math.floor(sizeFactor / step);
-    }
-
-    const baseTotalComplexity = baseGeneralComplexity + dimensionalComplexity;
-    let totalComplexityMultiplier = 1.0;
-    if (styleMode === 'specific') totalComplexityMultiplier += 0.25;
-    if (isometry && sprite.categoryId !== '7') totalComplexityMultiplier += 0.5;
-    const totalComplexity = Math.round(baseTotalComplexity * totalComplexityMultiplier);
+    // Total PTS score includes capped static complexity points + framePoints
+    const totalComplexity = cappedStaticPoints + framePoints;
     const isImpossible = totalComplexity > 100;
-    
-    // Each complexity point adds progressive surcharge percentage to baseCalculatedPrice:
-    let surchargePercent = 0;
-    if (totalComplexity <= 10) {
-      surchargePercent = totalComplexity * 0.10;
-    } else if (totalComplexity <= 20) {
-      surchargePercent = (10 * 0.10) + (totalComplexity - 10) * 0.15;
-    } else if (totalComplexity <= 30) {
-      surchargePercent = (10 * 0.10) + (10 * 0.15) + (totalComplexity - 20) * 0.20;
-    } else if (totalComplexity <= 40) {
-      surchargePercent = (10 * 0.10) + (10 * 0.15) + (10 * 0.20) + (totalComplexity - 30) * 0.25;
-    } else if (totalComplexity <= 50) {
-      surchargePercent = (10 * 0.10) + (10 * 0.15) + (10 * 0.20) + (10 * 0.25) + (totalComplexity - 40) * 0.30;
-    } else if (totalComplexity <= 100) {
-      surchargePercent = (10 * 0.10) + (10 * 0.15) + (10 * 0.20) + (10 * 0.25) + (10 * 0.30) + (totalComplexity - 50) * 0.35;
+
+    // Complexity multiplier: rate scales dynamically with complexity level (0.012 + PTS * 0.0002) up to 100 PTS.
+    // Above 100 PTS, each point adds +50% (+0.5 to multiplier / +50% markup of base price).
+    let complexityMultiplier: number;
+    if (totalComplexity <= 100) {
+      const ptsRate = 0.012 + (totalComplexity * 0.0002);
+      complexityMultiplier = 1 + (totalComplexity * ptsRate);
     } else {
-      surchargePercent = (10 * 0.10) + (10 * 0.15) + (10 * 0.20) + (10 * 0.25) + (10 * 0.30) + (50 * 0.35) + (totalComplexity - 100) * 1.00;
+      const baseMultiplierAt100 = 1 + (100 * (0.012 + 100 * 0.0002)); // 4.2
+      const excessPts = totalComplexity - 100;
+      complexityMultiplier = baseMultiplierAt100 + (excessPts * 0.5);
     }
     
-    let animatedSinglePrice = Math.round(baseCalculatedPrice * (1 + surchargePercent));
+    // Base Scaled Price multiplied by Complexity Markup
+    let animatedSinglePrice = Math.round(baseCalculatedPrice * complexityMultiplier);
 
-    // Dynamic size limit surcharge:
+    // Perspective (Isometry) modifier adds +50% separate markup to price
+    if (isometry && sprite.categoryId !== '7' && sprite.categoryId !== '2') {
+      animatedSinglePrice = Math.round(animatedSinglePrice * 1.50);
+    }
+
+    // Dynamic size limit surcharge (if resolution exceeds maximum base size of category):
     let sizeSurplusModifier = 1.0;
     if (sprite.categoryId !== '7' && cat.maxBaseSize) {
       const maxDim = Math.max(sprite.width, sprite.height);
@@ -1639,11 +1660,6 @@ export default function App() {
 
     if (sizeSurplusModifier > 1.0) {
       animatedSinglePrice = Math.round(animatedSinglePrice * sizeSurplusModifier);
-    }
-
-    // Design mode surcharge (+25% to price if scratch):
-    if (designMode === 'scratch') {
-      animatedSinglePrice = Math.round(animatedSinglePrice * 1.25);
     }
 
     // Variant calculation (50% value of full animated cost)
@@ -1673,28 +1689,36 @@ export default function App() {
       description: sprite.description.trim(),
       categoryId: sprite.categoryId,
       skinType: sprite.skinType,
+      skinPoints: 0,
       hasAnimation: sprite.hasAnimation && cat.supportsAnimation,
       detailPoints,
-      animPoints,
+      stylePoints,
+      animPoints: framePoints,
       framePoints,
-      surchargePercentPercent: Math.round(surchargePercent * 100),
-      generalComplexity,
-      dimensionalComplexity,
+      isoPoints,
+      surchargePercentPercent: Math.round((complexityMultiplier - 1) * 100),
+      generalComplexity: totalComplexity,
+      dimensionalComplexity: 0, // Canvas size no longer adds PTS
       totalComplexity,
-      baseGeneralComplexity,
-      baseTotalComplexity,
-      totalComplexityMultiplier,
+      baseGeneralComplexity: totalComplexity,
+      baseTotalComplexity: totalComplexity,
+      totalComplexityMultiplier: 1.0,
       isImpossible,
-      complexityStep: step,
+      complexityStep: 1,
       complexityCategory: getComplexityCategory(totalComplexity, lang),
       detailLevel,
-      animComplexity,
+      animComplexity: sprite.animComplexity || 'simple',
       designMode,
       styleMode,
       styleName,
       isometry,
       quality: sprite.quality || 'optimal',
-      qualitySurchargePercent: 0
+      qualitySurchargePercent: 0,
+      canvasScale,
+      staticCap,
+      rawStaticPoints,
+      cappedStaticPoints,
+      designPoints
     };
   };
 
@@ -1799,60 +1823,56 @@ export default function App() {
       // Assemble detailed formula log
       let itemLog = `${idx + 1}. [${res.categoryName}] (Size: ${res.sizeInfo})\n`;
       const baseCategoryPrice = CATEGORIES_LIST.find(c => c.id === s.categoryId)?.basePrice || 0;
-      itemLog += `   • Base category rate: ${formatPrice(baseCategoryPrice)}\n`;
+      itemLog += `   • Base Category Rate: ${formatPrice(baseCategoryPrice)}\n`;
 
       if (s.categoryId === '7') {
-        itemLog += `   • Minecraft Skin Type: ${res.sizeInfo}\n`;
-        itemLog += `   • Price per skin: ${formatPrice(res.animatedSinglePrice)}\n`;
+        const isHD = s.skinType === '2';
+        const minSizeForLog = 64;
+        const sizePx = isHD ? 128 : 64;
+        itemLog += `   • Canvas Multiplier: ((${sizePx} × ${sizePx}) / (${minSizeForLog}²))^0.35 ${isHD ? '× 1.15 (HD +15%)' : ''} = ${(res.canvasScale || 1).toFixed(3)}\n`;
+        itemLog += `   • Base Canvas Price: Math.max(${formatPrice(baseCategoryPrice)} × ${(res.canvasScale || 1).toFixed(3)}, 150 ₽) = ${formatPrice(res.baseCalculatedPrice)}\n`;
       } else {
-        itemLog += `   • Base General Complexity (Details + Animation): ${res.baseGeneralComplexity}\n`;
+        const itemCatForLog = CATEGORIES_LIST.find(c => c.id === s.categoryId);
+        const minSizeForLog = itemCatForLog ? itemCatForLog.minBaseSize : 16;
+        itemLog += `   • Canvas Multiplier: ((${s.width} × ${s.height}) / (${minSizeForLog}²))^0.35 = ${(res.canvasScale || 1).toFixed(3)}\n`;
+        itemLog += `   • Base Canvas Price: Math.max(${formatPrice(baseCategoryPrice)} × ${(res.canvasScale || 1).toFixed(3)}, 150 ₽) = ${formatPrice(res.baseCalculatedPrice)}\n`;
+      }
+      
+      itemLog += `   • Complexity Points (PTS): ${res.totalComplexity} pts\n`;
+      itemLog += `     - Quality Level: ${res.detailLevel === 'detailed' ? 'High' : res.detailLevel === 'moderate' ? 'Medium' : 'Low'} (+${res.detailPoints} pts)\n`;
+      if (s.hasAnimation && res.framePoints > 0) {
+        itemLog += `     - Animation (${res.frames} frames × ${s.animComplexity || 'simple'}): +${res.framePoints} pts\n`;
+      }
+      if (s.designMode === 'scratch') itemLog += `     - Design from scratch: +10 pts\n`;
+      if (s.styleMode === 'specific') itemLog += `     - Specific style (+30% complexity): +${res.stylePoints} pts\n`;
+      if (s.isometry && res.isoPoints > 0) itemLog += `     - Perspective (3D/Isometry +50% complexity): +${res.isoPoints} pts\n`;
+      
+      let mult: number;
+      if (res.totalComplexity <= 100) {
+        const ptsRateItem = 0.012 + (res.totalComplexity * 0.0002);
+        mult = 1 + res.totalComplexity * ptsRateItem;
+        itemLog += `   • Complexity Multiplier: 1 + (${res.totalComplexity} * ${ptsRateItem.toFixed(4)}) = x${mult.toFixed(3)}\n`;
+      } else {
+        const excessPts = res.totalComplexity - 100;
+        mult = 4.2 + excessPts * 0.5;
+        itemLog += `   • Complexity Multiplier (Exceeds 100 PTS limit: +50%/pt above 100): 4.2 + (${excessPts} * 0.5) = x${mult.toFixed(3)}\n`;
+      }
+      
+      let currentSubtotal = Math.round(res.baseCalculatedPrice * mult);
+      itemLog += `   • Price with Complexity: ${formatPrice(res.baseCalculatedPrice)} × ${mult.toFixed(3)} = ${formatPrice(currentSubtotal)}\n`;
         
-        const qPts = getQualityPoints(s.categoryId, res.detailLevel);
-        const detailLabel = `${res.detailLevel === 'detailed' ? 'Detailed' : res.detailLevel === 'moderate' ? 'Moderate' : 'Optimal'} (+${qPts})`;
-        itemLog += `     - Detail Level: ${detailLabel}\n`;
-        
-        if (s.hasAnimation) {
-          const animRate = (s as any).calculatedFrameMultiplier || (res.animComplexity === 'complex' ? 1.0 : res.animComplexity === 'medium' ? 0.5 : 0.25);
-          const animLvlLabel = res.animComplexity === 'complex' ? 'Complex (1.0 pt/frame)' : res.animComplexity === 'medium' ? 'Medium (0.5 pt/frame)' : 'Simple (0.25 pt/frame)';
-          itemLog += `     - Animation Style: ${animLvlLabel}\n`;
-          itemLog += `     - Frame count score: ${res.frames} frames × ${animRate} = +${Math.round(res.frames * animRate)} pts\n`;
-        }
-        
-        itemLog += `   • Dimensional Complexity: sqrt(${s.width}×${s.height}) = ${res.sizeFactor} px size factor\n`;
-        itemLog += `     - Pixel step for GC ${res.baseGeneralComplexity} is ${res.complexityStep} px\n`;
-        itemLog += `     - Dimensional Complexity = floor(${res.sizeFactor} / ${res.complexityStep}) = +${res.dimensionalComplexity}\n`;
-        
-        itemLog += `   • Base Total Complexity: ${res.baseGeneralComplexity} + ${res.dimensionalComplexity} = ${res.baseTotalComplexity}\n`;
-        
-        let multText = '1.0 (Standard)';
-        if (res.styleMode === 'specific' && res.isometry) {
-          multText = `1.75 (+25% specific style${res.styleName ? `: ${res.styleName}` : ''}, +50% volumetric perspective)`;
-        } else if (res.styleMode === 'specific') {
-          multText = `1.25 (+25% specific style${res.styleName ? `: ${res.styleName}` : ''})`;
-        } else if (res.isometry) {
-          multText = '1.5 (+50% volumetric perspective)';
-        }
-        itemLog += `   • Complexity Multiplier: ${multText}\n`;
-        itemLog += `   • Total Complexity: Math.round(${res.baseTotalComplexity} * ${res.totalComplexityMultiplier}) = ${res.totalComplexity} (${res.complexityCategory})\n`;
-        if (res.designMode === 'scratch') {
-          itemLog += `   • Наценка за разработку дизайна с нуля: +25% к итоговой стоимости ассета\n`;
-        }
-        
-        if (res.totalComplexity <= 100) {
-          const surchargePct = Math.round((res.animatedSinglePrice / baseCategoryPrice - 1) * 100);
-          itemLog += `   • Наценка за сложность: +${surchargePct}% к базовой стоимости\n`;
-          itemLog += `   • Стоимость оригинала: ${formatPrice(res.animatedSinglePrice)}\n`;
-        } else {
-          const surchargePct = Math.round((res.animatedSinglePrice / baseCategoryPrice - 1) * 100);
-          itemLog += `   • Наценка за сверхсложность (>100): +${surchargePct}% к базовой стоимости (+100% за каждое очко выше 100)\n`;
-          itemLog += `   • Стоимость оригинала: ${formatPrice(res.animatedSinglePrice)}\n`;
-        }
+      if (s.isometry) {
+        itemLog += `   • Perspective (Isometry): +50% separate markup = x1.50\n`;
+        currentSubtotal = Math.round(currentSubtotal * 1.5);
+        itemLog += `     - Price with Perspective: ${formatPrice(currentSubtotal)}\n`;
+      }
 
-        if (res.sizeSurplusModifier > 1.0) {
+      if (res.sizeSurplusModifier > 1.0) {
           const surplusPct = ((res.sizeSurplusModifier - 1.0) * 100).toFixed(1).replace('.0', '');
           itemLog += `   • Size limit surcharge: +${surplusPct}% (resolution exceeds max size ${res.maxBaseSize}px)\n`;
         }
-      }
+        
+        itemLog += `   • Final Single Sprite Price: ${formatPrice(res.animatedSinglePrice)}\n`;
 
       if (s.countVar > 0) {
         itemLog += `   • Price per variant (50%): ${formatPrice(res.singleVarPrice)}\n`;
@@ -1950,11 +1970,13 @@ export default function App() {
           return { ...s, templateSize: 'custom' };
         }
         const numericSize = parseInt(val) || 16;
+        const updatedSkinType = s.categoryId === '7' ? (numericSize >= 128 ? '2' : '1') : s.skinType;
         return {
           ...s,
           templateSize: val,
           width: numericSize,
-          height: numericSize
+          height: numericSize,
+          skinType: updatedSkinType
         };
       }
       return s;
@@ -2283,7 +2305,54 @@ export default function App() {
   const updateSpriteField = (id: number, key: keyof SpriteItemState, value: any) => {
     setSprites(prev => prev.map(s => {
       if (s.id === id) {
-        return { ...s, [key]: value };
+        let updated = { ...s, [key]: value };
+
+        // If switching category to Minecraft skin (7), set some sensible defaults
+        if (key === 'categoryId' && value === '7') {
+          if (updated.width !== 64 && updated.width !== 128) {
+            updated.width = 64;
+            updated.height = 64;
+            updated.templateSize = '64';
+          }
+          updated.skinType = updated.width >= 128 ? '2' : '1';
+        }
+
+        // If category is Minecraft skin, and we are updating dimensions or templateSize or skinType,
+        // synchronize them
+        if (updated.categoryId === '7') {
+          if (key === 'skinType') {
+            if (value === '2') {
+              updated.width = 128;
+              updated.height = 128;
+              updated.templateSize = '128';
+            } else {
+              updated.width = 64;
+              updated.height = 64;
+              updated.templateSize = '64';
+            }
+          } else if (key === 'width') {
+            updated.skinType = value >= 128 ? '2' : '1';
+            updated.height = value; // keep it square
+          } else if (key === 'height') {
+            updated.skinType = value >= 128 ? '2' : '1';
+            updated.width = value; // keep it square
+          } else if (key === 'templateSize') {
+            if (value === '128') {
+              updated.width = 128;
+              updated.height = 128;
+              updated.skinType = '2';
+            } else if (value === '64') {
+              updated.width = 64;
+              updated.height = 64;
+              updated.skinType = '1';
+            } else if (value !== 'custom') {
+              const sz = parseInt(value) || 64;
+              updated.skinType = sz >= 128 ? '2' : '1';
+            }
+          }
+        }
+
+        return updated;
       }
       return s;
     }));
@@ -2363,11 +2432,11 @@ export default function App() {
 
     orderCalculations.rawItems.forEach(item => {
       const designModeLabel = item.designMode === 'scratch'
-        ? (isRu ? 'С нуля (+25% к цене)' : 'From Scratch (+25% price)')
+        ? (isRu ? 'С нуля (+10 PTS к сложности)' : 'From Scratch (+10 PTS complexity)')
         : (isRu ? 'По готовому референсу' : 'From Reference');
       
       const styleLabel = item.styleMode === 'specific'
-        ? (isRu ? `Определённый стиль (+25% к сложности): ${item.styleName || 'Не указан'}` : `Specific Style (+25% complexity): ${item.styleName || 'Not specified'}`)
+        ? (isRu ? `Определённый стиль (+30% к сложности): ${item.styleName || 'Не указан'}` : `Specific Style (+30% complexity): ${item.styleName || 'Not specified'}`)
         : (isRu ? 'Свободный стиль' : 'Free Style');
 
       const projectionLabel = item.isometry
@@ -3139,7 +3208,7 @@ export default function App() {
                                   {lang === 'ru' ? 'Стиль' : 'Style'}
                                 </span>
                               )}
-                              {sprite.isometry && (
+                              {sprite.isometry && sprite.categoryId !== '7' && sprite.categoryId !== '2' && (
                                 <span className="px-1.5 py-0.5 rounded bg-fuchsia-950/80 text-fuchsia-300 border border-fuchsia-500/30 text-xs uppercase font-bold shrink-0">
                                   {lang === 'ru' ? 'Перспектива' : 'Perspective'}
                                 </span>
@@ -3416,6 +3485,7 @@ export default function App() {
                             <CategoryShowcaseAnimation
                               catId={sprite.categoryId}
                               lang={lang}
+                              skinType={sprite.skinType}
                             />
                           </div>
                         </div>
@@ -3502,16 +3572,13 @@ export default function App() {
                                     key={sOption.value}
                                     type="button"
                                     onClick={() => updateSpriteField(sprite.id, 'skinType', sOption.value as '1' | '2')}
-                                    className={`text-left px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                    className={`px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all flex items-center justify-center text-center cursor-pointer ${
                                       isSelected
                                         ? 'bg-purple-500 text-white border-purple-300 shadow-md scale-[1.01]'
                                         : 'bg-[#12051d] text-[#ebd6f7]/80 border-[#3d1a56] hover:bg-[#1a0729]'
                                     }`}
                                   >
                                     <span>{sOption.label}</span>
-                                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${isSelected ? 'bg-[#12051d] text-purple-300' : 'bg-[#1a0729] text-[#ebd6f7]/60'}`}>
-                                      {sOption.value === '2' ? 'HD' : '64px'}
-                                    </span>
                                   </button>
                                 );
                               })}
@@ -3804,52 +3871,79 @@ export default function App() {
                                     updateSpriteField(sprite.id, 'designMode', sprite.designMode === 'scratch' ? 'reference' : 'scratch');
                                   }
                                 }}
-                                className={`bg-[#12051d]/60 backdrop-blur-md border rounded-xl p-3 transition-all duration-200 hover:bg-[#180727] relative overflow-hidden flex items-center justify-between cursor-pointer active:scale-[0.99] select-none text-left ${
-                                  sprite.designMode === 'scratch' ? 'border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.15)]' : 'border-[#3d1956] hover:border-purple-500/40'
-                                }`}
+                                className="bg-[#12051d]/60 backdrop-blur-md border border-[#3d1956] hover:border-purple-500/50 hover:bg-[#180727] rounded-lg p-2 transition-all duration-200 text-left space-y-1.5 select-none cursor-pointer active:scale-[0.99]"
                               >
-                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDesignHelp(prev => ({ ...prev, [sprite.id]: !prev[sprite.id] }));
+                                      }}
+                                      className="w-4 h-4 rounded-full bg-[#270d3c] hover:bg-purple-800/80 border border-purple-400/50 text-purple-200 hover:text-white flex items-center justify-center text-[9px] font-black transition-all cursor-pointer shrink-0"
+                                      title={lang === 'ru' ? 'Справка' : 'Help'}
+                                    >
+                                      i
+                                    </button>
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">
+                                      {lang === 'ru' ? 'Дизайн' : 'Design'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-mono font-bold text-purple-300/80">
+                                    {sprite.designMode === 'scratch' ? '+10 PTS сложн.' : '0%'}
+                                  </span>
+                                </div>
+
+                                {/* Segmented Switch divided by line inside, with smooth solid green fill */}
+                                <div className="relative bg-[#0a0212] border border-[#3d1a56] rounded-lg p-0.5 grid grid-cols-2 gap-0 overflow-hidden">
+                                  {/* Center dividing line */}
+                                  <div className="absolute top-1 bottom-1 left-1/2 -translate-x-1/2 w-px bg-[#3d1a56] z-10 pointer-events-none" />
+
+                                  {/* Solid Green Fill backdrop */}
+                                  <motion.div
+                                    layout
+                                    transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                                    className={`absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded-md bg-emerald-600 border border-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.4)] z-0 ${
+                                      sprite.designMode === 'scratch' ? 'left-[calc(50%+1px)]' : 'left-0.5'
+                                    }`}
+                                  />
+
+                                  {/* Left Segment: По референсу */}
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setDesignHelp(prev => ({ ...prev, [sprite.id]: !prev[sprite.id] }));
+                                      updateSpriteField(sprite.id, 'designMode', 'reference');
                                     }}
-                                    className="w-6 h-6 rounded-full bg-[#270d3c] hover:bg-purple-800/80 border border-purple-400/50 text-purple-200 hover:text-white flex items-center justify-center text-xs font-black transition-all cursor-pointer select-none shrink-0"
-                                    title={lang === 'ru' ? 'Справка' : 'Help'}
-                                  >
-                                    i
-                                  </button>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-black uppercase tracking-wider text-purple-200">
-                                      {lang === 'ru' ? 'Дизайн' : 'Design'}
-                                    </span>
-                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                      <span className="text-xs text-[#ebd6f7]/80 font-medium">
-                                        {sprite.designMode === 'scratch' ? (lang === 'ru' ? 'С нуля' : 'Scratch') : (lang === 'ru' ? 'По референсу' : 'From Reference')}
-                                      </span>
-                                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                        sprite.designMode === 'scratch' ? 'bg-amber-950/80 text-amber-300 border border-amber-500/40' : 'bg-stone-900/60 text-stone-400 border border-stone-700/40'
-                                      }`}>
-                                        {sprite.designMode === 'scratch' ? '+25% к цене' : '0%'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Toggle Switch */}
-                                <div
-                                  className={`relative w-10 h-6 rounded-full transition-all duration-300 shrink-0 ${
-                                    sprite.designMode === 'scratch'
-                                      ? 'bg-amber-600 shadow-[0_0_10px_rgba(217,119,6,0.5)]'
-                                      : 'bg-[#0f0418] border border-purple-500/20'
-                                  }`}
-                                >
-                                  <div
-                                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-300 shadow-md ${
-                                      sprite.designMode === 'scratch' ? 'translate-x-4' : 'translate-x-0'
+                                    className={`relative z-20 py-1 px-1 text-center transition-colors cursor-pointer flex items-center justify-center ${
+                                      sprite.designMode === 'reference'
+                                        ? 'text-white font-black'
+                                        : 'text-white/70 hover:text-white font-semibold'
                                     }`}
-                                  />
+                                  >
+                                    <span className="text-[11px] text-white">
+                                      {lang === 'ru' ? 'По референсу' : 'From Ref'}
+                                    </span>
+                                  </button>
+
+                                  {/* Right Segment: С нуля */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateSpriteField(sprite.id, 'designMode', 'scratch');
+                                    }}
+                                    className={`relative z-20 py-1 px-1 text-center transition-colors cursor-pointer flex items-center justify-center ${
+                                      sprite.designMode === 'scratch'
+                                        ? 'text-white font-black'
+                                        : 'text-white/70 hover:text-white font-semibold'
+                                    }`}
+                                  >
+                                    <span className="text-[11px] text-white">
+                                      {lang === 'ru' ? 'С нуля (+10 PTS)' : 'Scratch (+10 PTS)'}
+                                    </span>
+                                  </button>
                                 </div>
                               </div>
 
@@ -3865,57 +3959,84 @@ export default function App() {
                                     updateSpriteField(sprite.id, 'styleMode', sprite.styleMode === 'specific' ? 'free' : 'specific');
                                   }
                                 }}
-                                className={`bg-[#12051d]/60 backdrop-blur-md border rounded-xl p-3 transition-all duration-200 hover:bg-[#180727] relative overflow-hidden flex items-center justify-between cursor-pointer active:scale-[0.99] select-none text-left ${
-                                  sprite.styleMode === 'specific' ? 'border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)]' : 'border-[#3d1956] hover:border-purple-500/40'
-                                }`}
+                                className="bg-[#12051d]/60 backdrop-blur-md border border-[#3d1956] hover:border-purple-500/50 hover:bg-[#180727] rounded-lg p-2 transition-all duration-200 text-left space-y-1.5 select-none cursor-pointer active:scale-[0.99]"
                               >
-                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setStyleHelp(prev => ({ ...prev, [sprite.id]: !prev[sprite.id] }));
+                                      }}
+                                      className="w-4 h-4 rounded-full bg-[#270d3c] hover:bg-purple-800/80 border border-purple-400/50 text-purple-200 hover:text-white flex items-center justify-center text-[9px] font-black transition-all cursor-pointer shrink-0"
+                                      title={lang === 'ru' ? 'Справка' : 'Help'}
+                                    >
+                                      i
+                                    </button>
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">
+                                      {lang === 'ru' ? 'Стилистика' : 'Style Mode'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-mono font-bold text-purple-300/80">
+                                    {sprite.styleMode === 'specific' ? '+30% сложн.' : '0%'}
+                                  </span>
+                                </div>
+
+                                {/* Segmented Switch divided by line inside, with smooth solid green fill */}
+                                <div className="relative bg-[#0a0212] border border-[#3d1a56] rounded-lg p-0.5 grid grid-cols-2 gap-0 overflow-hidden">
+                                  {/* Center dividing line */}
+                                  <div className="absolute top-1 bottom-1 left-1/2 -translate-x-1/2 w-px bg-[#3d1a56] z-10 pointer-events-none" />
+
+                                  {/* Solid Green Fill backdrop */}
+                                  <motion.div
+                                    layout
+                                    transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                                    className={`absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded-md bg-emerald-600 border border-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.4)] z-0 ${
+                                      sprite.styleMode === 'specific' ? 'left-[calc(50%+1px)]' : 'left-0.5'
+                                    }`}
+                                  />
+
+                                  {/* Left Segment: Свободный */}
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setStyleHelp(prev => ({ ...prev, [sprite.id]: !prev[sprite.id] }));
+                                      updateSpriteField(sprite.id, 'styleMode', 'free');
                                     }}
-                                    className="w-6 h-6 rounded-full bg-[#270d3c] hover:bg-purple-800/80 border border-purple-400/50 text-purple-200 hover:text-white flex items-center justify-center text-xs font-black transition-all cursor-pointer select-none shrink-0"
-                                    title={lang === 'ru' ? 'Справка' : 'Help'}
-                                  >
-                                    i
-                                  </button>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-black uppercase tracking-wider text-purple-200">
-                                      {lang === 'ru' ? 'Стилистика' : 'Style Mode'}
-                                    </span>
-                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                      <span className="text-xs text-[#ebd6f7]/80 font-medium">
-                                        {sprite.styleMode === 'specific' ? (lang === 'ru' ? 'Определённый' : 'Specific') : (lang === 'ru' ? 'Свободный' : 'Free')}
-                                      </span>
-                                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                        sprite.styleMode === 'specific' ? 'bg-purple-950/80 text-purple-300 border border-purple-500/40' : 'bg-stone-900/60 text-stone-400 border border-stone-700/40'
-                                      }`}>
-                                        {sprite.styleMode === 'specific' ? '+25% сложн.' : '0%'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Toggle Switch */}
-                                <div
-                                  className={`relative w-10 h-6 rounded-full transition-all duration-300 shrink-0 ${
-                                    sprite.styleMode === 'specific'
-                                      ? 'bg-purple-600 shadow-[0_0_10px_rgba(147,51,234,0.5)]'
-                                      : 'bg-[#0f0418] border border-purple-500/20'
-                                  }`}
-                                >
-                                  <div
-                                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-300 shadow-md ${
-                                      sprite.styleMode === 'specific' ? 'translate-x-4' : 'translate-x-0'
+                                    className={`relative z-20 py-1 px-1 text-center transition-colors cursor-pointer flex items-center justify-center ${
+                                      sprite.styleMode === 'free'
+                                        ? 'text-white font-black'
+                                        : 'text-white/70 hover:text-white font-semibold'
                                     }`}
-                                  />
+                                  >
+                                    <span className="text-[11px] text-white">
+                                      {lang === 'ru' ? 'Свободный' : 'Free Style'}
+                                    </span>
+                                  </button>
+
+                                  {/* Right Segment: Определённый */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateSpriteField(sprite.id, 'styleMode', 'specific');
+                                    }}
+                                    className={`relative z-20 py-1 px-1 text-center transition-colors cursor-pointer flex items-center justify-center ${
+                                      sprite.styleMode === 'specific'
+                                        ? 'text-white font-black'
+                                        : 'text-white/70 hover:text-white font-semibold'
+                                    }`}
+                                  >
+                                    <span className="text-[11px] text-white">
+                                      {lang === 'ru' ? 'Определённый (+30%)' : 'Specific (+30%)'}
+                                    </span>
+                                  </button>
                                 </div>
                               </div>
 
-                              {/* 3. Perspective View Card (Not shown for Minecraft Skins as they are natively 3D) */}
-                              {sprite.categoryId !== '7' && (
+                              {/* 3. Perspective View Card (Not shown for Minecraft Skins and Model Texturing) */}
+                              {sprite.categoryId !== '7' && sprite.categoryId !== '2' && (
                                 <div
                                   id="tour-3d-toggle"
                                   role="button"
@@ -3927,52 +4048,79 @@ export default function App() {
                                       updateSpriteField(sprite.id, 'isometry', !sprite.isometry);
                                     }
                                   }}
-                                  className={`bg-[#12051d]/60 backdrop-blur-md border rounded-xl p-3 transition-all duration-200 hover:bg-[#180727] relative overflow-hidden flex items-center justify-between cursor-pointer active:scale-[0.99] select-none text-left ${
-                                    sprite.isometry ? 'border-fuchsia-500/50 shadow-[0_0_12px_rgba(217,70,239,0.15)]' : 'border-[#3d1956] hover:border-purple-500/40'
-                                  }`}
+                                  className="bg-[#12051d]/60 backdrop-blur-md border border-[#3d1956] hover:border-purple-500/50 hover:bg-[#180727] rounded-lg p-2 transition-all duration-200 text-left space-y-1.5 select-none cursor-pointer active:scale-[0.99]"
                                 >
-                                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setIsometryHelp(prev => ({ ...prev, [sprite.id]: !prev[sprite.id] }));
+                                        }}
+                                        className="w-4 h-4 rounded-full bg-[#270d3c] hover:bg-purple-800/80 border border-purple-400/50 text-purple-200 hover:text-white flex items-center justify-center text-[9px] font-black transition-all cursor-pointer shrink-0"
+                                        title={lang === 'ru' ? 'Справка' : 'Help'}
+                                      >
+                                        i
+                                      </button>
+                                      <span className="text-[11px] font-black uppercase tracking-wider text-purple-200">
+                                        {lang === 'ru' ? 'Перспектива' : 'Perspective'}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-mono font-bold text-purple-300/80">
+                                      {sprite.isometry ? '+50% сложн.' : '0%'}
+                                    </span>
+                                  </div>
+
+                                  {/* Segmented Switch divided by line inside, with smooth solid green fill */}
+                                  <div className="relative bg-[#0a0212] border border-[#3d1a56] rounded-lg p-0.5 grid grid-cols-2 gap-0 overflow-hidden">
+                                    {/* Center dividing line */}
+                                    <div className="absolute top-1 bottom-1 left-1/2 -translate-x-1/2 w-px bg-[#3d1a56] z-10 pointer-events-none" />
+
+                                    {/* Solid Green Fill backdrop */}
+                                    <motion.div
+                                      layout
+                                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                                      className={`absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded-md bg-emerald-600 border border-emerald-400/80 shadow-[0_0_10px_rgba(16,185,129,0.4)] z-0 ${
+                                        sprite.isometry ? 'left-[calc(50%+1px)]' : 'left-0.5'
+                                      }`}
+                                    />
+
+                                    {/* Left Segment: 2D Плоская */}
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setIsometryHelp(prev => ({ ...prev, [sprite.id]: !prev[sprite.id] }));
+                                        updateSpriteField(sprite.id, 'isometry', false);
                                       }}
-                                      className="w-6 h-6 rounded-full bg-[#270d3c] hover:bg-purple-800/80 border border-purple-400/50 text-purple-200 hover:text-white flex items-center justify-center text-xs font-black transition-all cursor-pointer select-none shrink-0"
-                                      title={lang === 'ru' ? 'Справка' : 'Help'}
-                                    >
-                                      i
-                                    </button>
-                                    <div className="flex flex-col min-w-0">
-                                      <span className="text-xs font-black uppercase tracking-wider text-purple-200">
-                                        {lang === 'ru' ? 'Перспектива' : 'Perspective'}
-                                      </span>
-                                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                        <span className="text-xs text-[#ebd6f7]/80 font-medium">
-                                          {sprite.isometry ? (lang === 'ru' ? 'Объёмная (3D / Изометрия)' : 'Volumetric (3D / Iso)') : (lang === 'ru' ? '2D (Плоская)' : '2D (Flat)')}
-                                        </span>
-                                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                          sprite.isometry ? 'bg-fuchsia-950/80 text-fuchsia-300 border border-fuchsia-500/40' : 'bg-stone-900/60 text-stone-400 border border-stone-700/40'
-                                        }`}>
-                                          {sprite.isometry ? '+50% сложн.' : '0%'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Toggle Switch */}
-                                  <div
-                                    className={`relative w-10 h-6 rounded-full transition-all duration-300 shrink-0 ${
-                                      sprite.isometry
-                                        ? 'bg-fuchsia-600 shadow-[0_0_10px_rgba(217,70,239,0.5)]'
-                                        : 'bg-[#0f0418] border border-purple-500/20'
-                                    }`}
-                                  >
-                                    <div
-                                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-300 shadow-md ${
-                                        sprite.isometry ? 'translate-x-4' : 'translate-x-0'
+                                      className={`relative z-20 py-1 px-1 text-center transition-colors cursor-pointer flex items-center justify-center ${
+                                        !sprite.isometry
+                                          ? 'text-white font-black'
+                                          : 'text-white/70 hover:text-white font-semibold'
                                       }`}
-                                    />
+                                    >
+                                      <span className="text-[11px] text-white">
+                                        {lang === 'ru' ? '2D (Плоская)' : '2D (Flat)'}
+                                      </span>
+                                    </button>
+
+                                    {/* Right Segment: 3D Изометрия */}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateSpriteField(sprite.id, 'isometry', true);
+                                      }}
+                                      className={`relative z-20 py-1 px-1 text-center transition-colors cursor-pointer flex items-center justify-center ${
+                                        sprite.isometry
+                                          ? 'text-white font-black'
+                                          : 'text-white/70 hover:text-white font-semibold'
+                                      }`}
+                                    >
+                                      <span className="text-[11px] text-white">
+                                        {lang === 'ru' ? '3D / Изометрия' : '3D / Iso'}
+                                      </span>
+                                    </button>
                                   </div>
                                 </div>
                               )}
@@ -4016,7 +4164,7 @@ export default function App() {
                                     <strong className="text-purple-300">{lang === 'ru' ? 'По референсу (0%):' : 'From Reference (0%):'}</strong> {lang === 'ru' ? 'Работа по готовому эскизу, скетчу или макету.' : 'Artist works from your existing sketch or reference.'}
                                   </div>
                                   <div>
-                                    <strong className="text-amber-400">{lang === 'ru' ? 'С нуля (+25% к цене):' : 'From Scratch (+25% price):'}</strong> {lang === 'ru' ? 'Разработка чистого концепт-арта и внешнего вида с нуля по вашему описанию (+25% к итоговой стоимости ассета).' : 'Developing character/object design completely from scratch based on text description (+25% to price).'}
+                                    <strong className="text-amber-400">{lang === 'ru' ? 'С нуля (+10 PTS к сложности):' : 'From Scratch (+10 PTS complexity):'}</strong> {lang === 'ru' ? 'Разработка чистого концепт-арта и внешнего вида с нуля по вашему описанию (+10 очков сложности к ассету).' : 'Developing character/object design completely from scratch based on text description (+10 complexity points).'}
                                   </div>
                                 </motion.div>
                               )}
@@ -4035,7 +4183,7 @@ export default function App() {
                                     <strong className="text-purple-300">{lang === 'ru' ? 'Свободный стиль (0%):' : 'Free Style (0%):'}</strong> {lang === 'ru' ? 'Свободный выбор палитры без инструкций.' : 'Free palette selection without instructions.'}
                                   </div>
                                   <div>
-                                    <strong className="text-purple-400">{lang === 'ru' ? 'Определённый стиль (+25% к сложности):' : 'Specific Style (+25% complexity):'}</strong> {lang === 'ru' ? 'Следование строго заданному художественному стилю (например, Cyberpunk, Metal Slug, Retro GameBoy) с заполнением наименования (+25% к сложности).' : 'Adhering strictly to a user-defined style standard with text specification (+25% to complexity score).'}
+                                    <strong className="text-purple-400">{lang === 'ru' ? 'Определённый стиль (+30% к сложности):' : 'Specific Style (+30% complexity):'}</strong> {lang === 'ru' ? 'Следование строго заданному художественному стилю (например, Cyberpunk, Metal Slug, Retro GameBoy) с заполнением наименования (+30% к сложности).' : 'Adhering strictly to a user-defined style standard with text specification (+30% to complexity score).'}
                                   </div>
                                 </motion.div>
                               )}
@@ -4061,29 +4209,7 @@ export default function App() {
                             </AnimatePresence>
                           </div>
 
-                        {/* Sprite Complexity Options */}
-                        {sprite.categoryId === '7' && (
-                          // Minecraft-skins: standard skin model selection
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-sm font-bold uppercase tracking-wider text-[#ebd6f7]/90">
-                                {t.skinTypeLabel}
-                              </label>
-                            </div>
-                            <select
-                              value={sprite.skinType || '1'}
-                              onChange={(e) => updateSpriteField(sprite.id, 'skinType', e.target.value as '1' | '2')}
-                              className="w-full bg-[#12051d] text-[#ebd6f7]/95 border-2 border-[#3d1a56] hover:border-purple-500/50 rounded-xl px-4 py-3 text-sm font-extrabold focus:outline-none focus:border-purple-400 transition-all cursor-pointer"
-                            >
-                              <option value="1" className="bg-[#1c0827]">
-                                {t.standardSkin}
-                              </option>
-                              <option value="2" className="bg-[#1c0827]">
-                                {t.hdSkin}
-                              </option>
-                            </select>
-                          </div>
-                        )}
+
                       </div>
                     </div>
 
@@ -5029,13 +5155,13 @@ export default function App() {
                                     <div className="flex justify-between items-center">
                                       <span className="text-[#ebd6f7]/60">{lang === 'ru' ? 'Разработка:' : 'Design:'}</span>
                                       <span className={`font-bold px-1.5 py-0.5 rounded text-xs ${item.designMode === 'scratch' ? 'text-amber-300 bg-amber-950/60 border border-amber-500/30' : 'text-stone-300'}`}>
-                                        {item.designMode === 'scratch' ? (lang === 'ru' ? 'С нуля (+25% к цене)' : 'Scratch (+25% price)') : (lang === 'ru' ? 'По референсу' : 'Reference')}
+                                        {item.designMode === 'scratch' ? (lang === 'ru' ? 'С нуля (+10 PTS)' : 'Scratch (+10 PTS)') : (lang === 'ru' ? 'По референсу' : 'Reference')}
                                       </span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                       <span className="text-[#ebd6f7]/60">{lang === 'ru' ? 'Стилистика:' : 'Style:'}</span>
                                       <span className={`font-bold px-1.5 py-0.5 rounded text-xs ${item.styleMode === 'specific' ? 'text-purple-300 bg-purple-900/60 border border-purple-500/30' : 'text-stone-300'}`}>
-                                        {item.styleMode === 'specific' ? (lang === 'ru' ? `Стиль: ${item.styleName || 'Определённый'} (+25% сложн.)` : `Style: ${item.styleName || 'Specific'} (+25% comp.)`) : (lang === 'ru' ? 'Свободный' : 'Free')}
+                                        {item.styleMode === 'specific' ? (lang === 'ru' ? `Стиль: ${item.styleName || 'Определённый'} (+30% сложн.)` : `Style: ${item.styleName || 'Specific'} (+30% comp.)`) : (lang === 'ru' ? 'Свободный' : 'Free')}
                                       </span>
                                     </div>
                                     <div className="flex justify-between items-center">

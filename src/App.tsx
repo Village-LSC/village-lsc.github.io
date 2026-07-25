@@ -39,7 +39,8 @@ import {
   Layout,
   Tv,
   Gamepad2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RefreshCw
 } from 'lucide-react';
 import {
   Language,
@@ -640,10 +641,17 @@ function SquareFrame({ cat, imagePath, lang, formatPrice }: SquareFrameProps) {
 
 interface InteractiveDitherProps {
   mousePos: { x: number; y: number };
+  isEnabled: boolean;
 }
 
-function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
+function InteractiveDitherBackground({ mousePos, isEnabled }: InteractiveDitherProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  // Keep isEnabled updated in a ref so the requestAnimationFrame loop can access the latest state without tearing down
+  const isEnabledRef = React.useRef(isEnabled);
+  React.useEffect(() => {
+    isEnabledRef.current = isEnabled;
+  }, [isEnabled]);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -660,6 +668,10 @@ function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
     let currentRadius = Math.sqrt(currentCX * currentCX + currentCY * currentCY) * 0.85;
     let currentIntensity = 0.0; // 0.0 (ambient idle gold) to 1.0 (vibrant bright firefly green-gold)
     let currentAvatarIntensity = 0.0; // special black hole effect around avatar
+    
+    // Smooth transition factor for enabling/disabling the background animation.
+    // Starts exactly at the current enabled state.
+    let currentTransition = isEnabledRef.current ? 1.0 : 0.0;
 
     // Low-resolution render scale factor.
     // Scales down the canvas dimensions, reducing the pixel grid calculations by 64x,
@@ -756,6 +768,22 @@ function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
     const draw = () => {
       const cols = canvas.width;
       const rows = canvas.height;
+
+      // Animate currentTransition smoothly:
+      // Lerps towards 1.0 if enabled, and 0.0 if disabled.
+      const targetTransition = isEnabledRef.current ? 1.0 : 0.0;
+      currentTransition += (targetTransition - currentTransition) * 0.04;
+
+      // Extreme Performance Optimization: 
+      // If fully turned off (transition complete), render static blank dark background `#0d0614`
+      // and skip heavy per-pixel loops entirely for stellar performance!
+      if (currentTransition < 0.005) {
+        currentTransition = 0;
+        ctx.fillStyle = '#0d0614';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        animationId = requestAnimationFrame(draw);
+        return;
+      }
       
       // Idle target position (center of screen, in screen coordinates)
       let targetCX = window.innerWidth / 2;
@@ -794,6 +822,7 @@ function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw Twinkling Space Stars as perfect 1x1 pixel cells matching scaled resolution
+      // Stars slowly fade out with currentTransition
       stars.forEach(star => {
         star.phase += star.speed;
         
@@ -806,9 +835,11 @@ function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
           star.phase = -Math.PI / 2 + 0.3; // Start fade back in, avoiding immediate relocation re-trigger
         }
 
-        const opacity = Math.max(0.0, star.maxOpacity * (0.5 + 0.5 * Math.sin(star.phase)));
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-        ctx.fillRect(star.x, star.y, 1, 1);
+        const opacity = Math.max(0.0, star.maxOpacity * (0.5 + 0.5 * Math.sin(star.phase)) * currentTransition);
+        if (opacity > 0) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+          ctx.fillRect(star.x, star.y, 1, 1);
+        }
       });
 
       // Add a subtle organic breathing jitter to the center point so it feels like living fireflies!
@@ -820,7 +851,14 @@ function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
       const activeCY = (currentCY + jitterY) / scale;
       const currentRadiusScaled = currentRadius / scale;
 
-      const maxDistToCalculateRadialSq = (currentRadiusScaled * 1.15) * (currentRadiusScaled * 1.15);
+      // Mathematically beautiful "gathering nebula" transition ("вся туманность скопилась в один сплошной фон"):
+      // As currentTransition approaches 0, the radius shrinks towards 5% of its size, concentrating all cosmic mass.
+      const activeRadius = currentRadiusScaled * (0.05 + 0.95 * currentTransition);
+
+      // As radius shrinks, concentration rises to make the core solid and dense before fully dissolving
+      const concentration = 1.0 + (3.0 * (1.0 - currentTransition));
+
+      const maxDistToCalculateRadialSq = (activeRadius * 1.15) * (activeRadius * 1.15);
 
       for (let r = 0; r < rows; r++) {
         const y = r;
@@ -854,20 +892,24 @@ function InteractiveDitherBackground({ mousePos }: InteractiveDitherProps) {
             const absX = dx < 0 ? -dx : dx;
             const absY = dy < 0 ? -dy : dy;
             dist = absX > absY ? absX + 0.4 * absY : absY + 0.4 * absX;
-            radialVal = Math.max(0, Math.min(1.1, 1.15 - (dist / currentRadiusScaled)));
+            // Radius scales with transition factor, and concentration boosts density
+            radialVal = Math.max(0, Math.min(1.1 * concentration, (1.15 * concentration) - (dist / activeRadius)));
           }
           
           // Slow diagonal wave ripple (matching the classic Discord quest style)
+          // Wave amplitude scales down to 0 as transition goes to 0, calm flatting the nebula waves!
           const diagonalIndex = c - r;
-          const wave = Math.sin(diagonalIndex * 0.045 - shimmerPhase) * 0.12;
+          const wave = Math.sin(diagonalIndex * 0.045 - shimmerPhase) * 0.12 * currentTransition;
           
           const val = Math.max(0, Math.min(1, radialVal + wave));
 
           if (val + texture > threshold) {
             // Determine cell color
-            const hoverInfluence = isOutside ? 0 : currentIntensity * Math.max(0, 1 - dist / (currentRadiusScaled * 1.2));
-            const avatarInfluence = isOutside ? 0 : currentAvatarIntensity * Math.max(0, 1 - dist / (currentRadiusScaled * 1.1));
-            let aVal = 0.07 + (0.22 - 0.07) * currentIntensity;
+            const hoverInfluence = isOutside ? 0 : currentIntensity * Math.max(0, 1 - dist / (activeRadius * 1.2));
+            const avatarInfluence = isOutside ? 0 : currentAvatarIntensity * Math.max(0, 1 - dist / (activeRadius * 1.1));
+            
+            // Overall opacity transitions beautifully to 0
+            let aVal = (0.07 + (0.22 - 0.07) * currentIntensity) * currentTransition;
             
             let rVal = 139;
             let gVal = 92;
@@ -987,7 +1029,53 @@ export default function App() {
   // Localization and Currency State
   const [lang, setLang] = useState<Language>('ru');
   const [currency, setCurrency] = useState<Currency>('rub');
-  const [usdRate, setUsdRate] = useState<number>(92); // Editable exchange rate, pre-populated with 92 RUB per USD
+  const [usdRate, setUsdRate] = useState<number>(92); // Exchange rate, pre-populated with 92 RUB per USD
+  const [rateStatus, setRateStatus] = useState<'loading' | 'success' | 'error'>('loading');
+
+  const fetchExchangeRate = async (showToast = false) => {
+    setRateStatus('loading');
+    try {
+      const response = await fetch('https://open.er-api.com/v6/latest/USD');
+      if (!response.ok) throw new Error('Primary API failed');
+      const data = await response.json();
+      if (data && data.rates && typeof data.rates.RUB === 'number') {
+        const rate = Math.round(data.rates.RUB * 100) / 100;
+        setUsdRate(rate);
+        setRateStatus('success');
+        if (showToast) {
+          triggerToast(lang === 'ru' ? `Курс обновлен: 1 $ ≈ ${rate} ₽` : `Rate updated: 1 $ ≈ ${rate} RUB`, 'success');
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('Primary exchange rate API failed, trying backup...', err);
+    }
+
+    try {
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      if (!response.ok) throw new Error('Backup API failed');
+      const data = await response.json();
+      if (data && data.rates && typeof data.rates.RUB === 'number') {
+        const rate = Math.round(data.rates.RUB * 100) / 100;
+        setUsdRate(rate);
+        setRateStatus('success');
+        if (showToast) {
+          triggerToast(lang === 'ru' ? `Курс обновлен: 1 $ ≈ ${rate} ₽` : `Rate updated: 1 $ ≈ ${rate} RUB`, 'success');
+        }
+        return;
+      }
+    } catch (err) {
+      console.error('All exchange rate APIs failed', err);
+      setRateStatus('error');
+      if (showToast) {
+        triggerToast(lang === 'ru' ? 'Не удалось обновить курс. Используется стандартное значение.' : 'Failed to fetch rate. Standard value is used.', 'error');
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchExchangeRate();
+  }, []);
 
   // Animated Background Enable State
   const [isBgEnabled, setIsBgEnabled] = useState<boolean>(() => {
@@ -1330,6 +1418,7 @@ export default function App() {
 
   const volumeRef = React.useRef(volume);
   const isPlayingRef = React.useRef(isPlaying);
+  const fadeIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -1418,6 +1507,9 @@ export default function App() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      if (fadeIntervalRef.current) {
+        clearInterval(fadeIntervalRef.current);
+      }
       audio.removeEventListener('error', useRemoteFallback);
       cleanupListeners();
       audioRef.current = null;
@@ -1426,21 +1518,73 @@ export default function App() {
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = volume;
+      // Set target volume directly only if not currently fading to prevent snapping
+      if (!fadeIntervalRef.current) {
+        audioRef.current.volume = volume;
+      }
     }
   }, [volume]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
-    if (isPlaying && !audioRef.current.paused) {
-      audioRef.current.pause();
-      setIsPlaying(false);
+    
+    // Clear any running fade interval first
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+
+    const audio = audioRef.current;
+    
+    if (isPlaying) {
+      // Smooth fade out to 0 and then pause
+      const fadeSteps = 30;
+      const stepTime = 30; // 900ms fade duration
+      const startVol = audio.volume;
+      let currentStep = 0;
+      
+      fadeIntervalRef.current = setInterval(() => {
+        currentStep++;
+        const ratio = (fadeSteps - currentStep) / fadeSteps;
+        audio.volume = Math.max(0, startVol * ratio);
+        
+        if (currentStep >= fadeSteps) {
+          if (fadeIntervalRef.current) {
+            clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+          }
+          audio.pause();
+          setIsPlaying(false);
+        }
+      }, stepTime);
     } else {
-      audioRef.current.volume = volume;
-      audioRef.current.play().then(() => {
+      // Start from the absolute beginning (0:00) and fade in smoothly
+      audio.currentTime = 0;
+      audio.volume = 0;
+      audio.play().then(() => {
         setIsPlaying(true);
+        const fadeSteps = 30;
+        const stepTime = 30; // 900ms fade duration
+        const targetVol = volume; // default soft volume
+        let currentStep = 0;
+        
+        fadeIntervalRef.current = setInterval(() => {
+          currentStep++;
+          const ratio = currentStep / fadeSteps;
+          audio.volume = Math.min(targetVol, targetVol * ratio);
+          
+          if (currentStep >= fadeSteps) {
+            if (fadeIntervalRef.current) {
+              clearInterval(fadeIntervalRef.current);
+              fadeIntervalRef.current = null;
+            }
+            audio.volume = targetVol;
+          }
+        }, stepTime);
       }).catch(err => {
-        console.log('Playback error:', err);
+        console.log('Playback error on toggle play:', err);
+        // Fallback: set playing if standard play works but blocked initially
+        setIsPlaying(true);
       });
     }
   };
@@ -2619,96 +2763,189 @@ export default function App() {
       <DitherNebula isExpanded={isExpanded} />
 
       {/* Interactive Cursor Glow with Retro Dithering */}
-      {isBgEnabled && <InteractiveDitherBackground mousePos={mousePos} />}
+      <InteractiveDitherBackground mousePos={mousePos} isEnabled={isBgEnabled} />
 
       {/* Top Controls / Nav Bar */}
-      <div className="relative z-10 max-w-4xl mx-auto px-4 pt-6 flex flex-wrap justify-between items-center gap-4">
-        {/* Active Currency Exchange Info (Only shown if USD) */}
-        <div className="flex items-center gap-3 bg-[#2d143f] text-[#ebd6f7] px-4 py-2.5 rounded-xl border-2 border-[#180a24] shadow-md text-sm font-mono">
-          <Coins className="w-4.5 h-4.5 text-purple-300 animate-pulse" />
-          <span>{t.exchangeRateNote.replace('{rate}', usdRate.toString())}</span>
-        </div>
+      <div className="relative z-10 max-w-4xl mx-auto px-4 pt-6 select-none">
+        
+        {/* Main Unified Header Controller Console */}
+        <div className="bg-[#260f38] text-[#ebd6f7] rounded-2xl border-2 border-[#180a24] p-4 sm:p-5 shadow-[0_16px_48px_rgba(0,0,0,0.65)] flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          
+          {/* Rate Ticker Section (Left side - Made significantly larger and prominent) */}
+          <div className="flex items-center justify-between gap-4 bg-[#1b0826] px-5 py-4 rounded-xl border border-[#3c1753]/60 min-w-0 lg:flex-1">
+            <div className="flex items-center gap-4 min-w-0">
+              <Coins className="w-7 h-7 text-yellow-400 animate-pulse shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-purple-400 tracking-widest font-mono uppercase">
+                  {lang === 'ru' ? 'КУРС ДОЛЛАРА (LIVE)' : 'USD EXCHANGE RATE'}
+                </span>
+                <span className="text-xl sm:text-2xl font-black font-mono text-white leading-none mt-1 select-all">
+                  1 $ ≈ <span className="text-purple-300">{usdRate}</span> ₽
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Status Badge */}
+              <div 
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black border tracking-wider ${
+                  rateStatus === 'loading' 
+                    ? 'bg-purple-950/60 text-purple-300 border-purple-500/30' 
+                    : rateStatus === 'success'
+                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/30'
+                    : 'bg-rose-950/60 text-rose-300 border-rose-500/30'
+                }`}
+                title={
+                  rateStatus === 'loading'
+                    ? (lang === 'ru' ? 'Получение курса...' : 'Fetching rate...')
+                    : rateStatus === 'success'
+                    ? (lang === 'ru' ? 'Актуальный курс загружен автоматически' : 'Latest rate loaded automatically')
+                    : (lang === 'ru' ? 'Ошибка загрузки. Используется статика' : 'Load failed. Static fallback used')
+                }
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  rateStatus === 'loading' 
+                    ? 'bg-purple-400 animate-pulse' 
+                    : rateStatus === 'success'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : 'bg-rose-400'
+                }`} />
+                <span>
+                  {rateStatus === 'loading' 
+                    ? (lang === 'ru' ? 'СЕТЬ' : 'NET') 
+                    : rateStatus === 'success'
+                    ? (lang === 'ru' ? 'АВТО' : 'AUTO')
+                    : (lang === 'ru' ? 'ОФЛАЙН' : 'STATIC')
+                  }
+                </span>
+              </div>
 
-        {/* Simplified BGM Toggle Widget */}
-        <button
-          onClick={togglePlay}
-          className={`flex items-center gap-2 bg-[#2d143f] text-[#ebd6f7] px-4 py-2 rounded-xl border-2 border-[#180a24] shadow-md text-sm font-semibold cursor-pointer transition-all active:scale-95 hover:border-purple-400 select-none`}
-          title={isPlaying ? 'Turn BGM Off' : 'Turn BGM On'}
-        >
-          {isPlaying ? (
-            <>
-              <Volume2 className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
-              <span className="font-bold">BGM: {lang === 'ru' ? 'ВКЛ' : 'ON'}</span>
-            </>
-          ) : (
-            <>
-              <VolumeX className="w-4 h-4 text-rose-400 shrink-0" />
-              <span className="font-bold text-purple-400/80">BGM: {lang === 'ru' ? 'ВЫКЛ' : 'OFF'}</span>
-            </>
-          )}
-        </button>
-
-        {/* Animated Background Toggle Widget */}
-        <button
-          onClick={toggleBg}
-          className={`flex items-center gap-2 bg-[#2d143f] text-[#ebd6f7] px-4 py-2 rounded-xl border-2 border-[#180a24] shadow-md text-sm font-semibold cursor-pointer transition-all active:scale-95 hover:border-purple-400 select-none`}
-          title={isBgEnabled ? (lang === 'ru' ? 'Выключить анимацию фона' : 'Turn Background Animation Off') : (lang === 'ru' ? 'Включить анимацию фона' : 'Turn Background Animation On')}
-        >
-          {isBgEnabled ? (
-            <>
-              <Sparkles className="w-4 h-4 text-yellow-400 animate-pulse shrink-0" />
-              <span className="font-bold">{lang === 'ru' ? 'ФОН: ВКЛ' : 'BG: ON'}</span>
-            </>
-          ) : (
-            <>
-              <EyeOff className="w-4 h-4 text-rose-400 shrink-0" />
-              <span className="font-bold text-purple-400/80">{lang === 'ru' ? 'ФОН: ВЫКЛ' : 'BG: OFF'}</span>
-            </>
-          )}
-        </button>
-
-        {/* Translation and Currency Toggles */}
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          {/* Currency Toggle */}
-          <div className="flex items-center gap-2 bg-[#2d143f] rounded-xl p-1 border-2 border-[#180a24] shadow-md text-sm font-semibold">
-            <button
-              onClick={() => setCurrency('rub')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                currency === 'rub' ? 'bg-[#c084fc] text-[#1e0a2b] font-bold shadow' : 'text-[#ebd6f7] hover:bg-white/5'
-              }`}
-            >
-              RUB (₽)
-            </button>
-            <button
-              onClick={() => setCurrency('usd')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                currency === 'usd' ? 'bg-[#c084fc] text-[#1e0a2b] font-bold shadow' : 'text-[#ebd6f7] hover:bg-white/5'
-              }`}
-            >
-              USD ($)
-            </button>
+              {/* Refresh rate button */}
+              <button
+                onClick={() => {
+                  fetchExchangeRate(true);
+                }}
+                disabled={rateStatus === 'loading'}
+                className={`text-[#ebd6f7]/80 hover:text-white disabled:opacity-50 transition-all p-2 rounded-lg cursor-pointer hover:bg-white/10 active:scale-90 ${rateStatus === 'loading' ? 'animate-spin' : ''}`}
+                title={lang === 'ru' ? 'Обновить курс' : 'Update rate'}
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Language Toggle */}
-          <div className="flex items-center gap-2 bg-[#2d143f] rounded-xl p-1 border-2 border-[#180a24] shadow-md text-sm font-semibold">
-            <button
-              onClick={() => setLang('ru')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                lang === 'ru' ? 'bg-[#c084fc] text-[#1e0a2b] font-bold shadow' : 'text-[#ebd6f7] hover:bg-white/5'
-              }`}
-            >
-              РУС
-            </button>
-            <button
-              onClick={() => setLang('en')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                lang === 'en' ? 'bg-[#c084fc] text-[#1e0a2b] font-bold shadow' : 'text-[#ebd6f7] hover:bg-white/5'
-              }`}
-            >
-              ENG
-            </button>
+          {/* Symmetrical Dual Segmented Selector (Right side) */}
+          <div className="flex flex-col sm:flex-row gap-4 items-stretch lg:flex-[1.4] xl:flex-[1.2]">
+            
+            {/* Currency Segmented Control */}
+            <div className="flex-1 flex flex-col justify-between bg-[#1b0826] rounded-xl p-2.5 border border-[#3c1753]/60">
+              <span className="text-[10px] font-bold text-purple-400 tracking-widest font-mono uppercase px-2 mb-2">
+                {lang === 'ru' ? 'Валюта расчета' : 'Calculation Currency'}
+              </span>
+              <div className="grid grid-cols-2 gap-1 bg-[#250d33] p-1 rounded-lg">
+                <button
+                  onClick={() => setCurrency('rub')}
+                  className={`py-2 rounded-md text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+                    currency === 'rub' 
+                      ? 'bg-[#c084fc] text-[#1e0a2b] font-black shadow-[0_2px_8px_rgba(192,132,252,0.4)]' 
+                      : 'text-[#ebd6f7]/80 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  RUB (₽)
+                </button>
+                <button
+                  onClick={() => setCurrency('usd')}
+                  className={`py-2 rounded-md text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+                    currency === 'usd' 
+                      ? 'bg-[#c084fc] text-[#1e0a2b] font-black shadow-[0_2px_8px_rgba(192,132,252,0.4)]' 
+                      : 'text-[#ebd6f7]/80 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  USD ($)
+                </button>
+              </div>
+            </div>
+
+            {/* Language Segmented Control - Made prominent and larger */}
+            <div className="flex-1 flex flex-col justify-between bg-[#1b0826] rounded-xl p-2.5 border border-[#3c1753]/60">
+              <span className="text-[10px] font-bold text-purple-400 tracking-widest font-mono uppercase px-2 mb-2">
+                {lang === 'ru' ? 'Язык интерфейса' : 'Interface Language'}
+              </span>
+              <div className="grid grid-cols-2 gap-1 bg-[#250d33] p-1 rounded-lg">
+                <button
+                  onClick={() => setLang('ru')}
+                  className={`py-2 rounded-md text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+                    lang === 'ru' 
+                      ? 'bg-[#c084fc] text-[#1e0a2b] font-black shadow-[0_2px_8px_rgba(192,132,252,0.4)]' 
+                      : 'text-[#ebd6f7]/80 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  РУССКИЙ
+                </button>
+                <button
+                  onClick={() => setLang('en')}
+                  className={`py-2 rounded-md text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
+                    lang === 'en' 
+                      ? 'bg-[#c084fc] text-[#1e0a2b] font-black shadow-[0_2px_8px_rgba(192,132,252,0.4)]' 
+                      : 'text-[#ebd6f7]/80 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  ENGLISH
+                </button>
+              </div>
+            </div>
+
           </div>
+
         </div>
+
+        {/* Ambient Preferences (BGM / BG animation) beneath - big prominent premium buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch gap-4 mt-4 w-full">
+          <button
+            onClick={togglePlay}
+            className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-sm sm:text-base shadow-lg duration-200 ${
+              isPlaying 
+                ? 'bg-[#210c30] text-[#ebd6f7] border-[#c084fc] hover:border-purple-300 shadow-[0_0_20px_rgba(192,132,252,0.2)]'
+                : 'bg-[#1b0826]/80 text-purple-400/50 border-[#3c1753]/60 hover:text-[#ebd6f7]/80 hover:border-purple-500/60'
+            }`}
+            title={isPlaying ? 'Turn BGM Off' : 'Turn BGM On'}
+          >
+            {isPlaying ? (
+              <>
+                <Volume2 className="w-5.5 h-5.5 text-emerald-400 animate-pulse shrink-0" />
+                <span className="tracking-wide">BGM: {lang === 'ru' ? 'ВКЛЮЧЕНА' : 'ON'}</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-5.5 h-5.5 text-rose-400 shrink-0" />
+                <span className="tracking-wide">BGM: {lang === 'ru' ? 'ВЫКЛЮЧЕНА' : 'OFF'}</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={toggleBg}
+            className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-sm sm:text-base shadow-lg duration-200 ${
+              isBgEnabled
+                ? 'bg-[#210c30] text-[#ebd6f7] border-[#c084fc] hover:border-purple-300 shadow-[0_0_20px_rgba(192,132,252,0.2)]'
+                : 'bg-[#1b0826]/80 text-purple-400/50 border-[#3c1753]/60 hover:text-[#ebd6f7]/80 hover:border-purple-500/60'
+            }`}
+            title={isBgEnabled ? (lang === 'ru' ? 'Выключить анимацию фона' : 'Turn Background Animation Off') : (lang === 'ru' ? 'Включить анимацию фона' : 'Turn Background Animation On')}
+          >
+            {isBgEnabled ? (
+              <>
+                <Sparkles className="w-5.5 h-5.5 text-yellow-400 animate-pulse shrink-0" />
+                <span className="tracking-wide">{lang === 'ru' ? 'АКТИВНЫЙ ФОН: ВКЛ' : 'NEBULA BG: ON'}</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-5.5 h-5.5 text-rose-400 shrink-0" />
+                <span className="tracking-wide">{lang === 'ru' ? 'АКТИВНЫЙ ФОН: ВЫКЛ' : 'NEBULA BG: OFF'}</span>
+              </>
+            )}
+          </button>
+        </div>
+
       </div>
 
       {/* Hero Section */}

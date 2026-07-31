@@ -207,10 +207,10 @@ const STEPS: StepDefinition[] = [
       {
         id: 'anim-complexity',
         targetId: 'tour-anim-complexity',
-        titleRu: '4.3 Тип сложности движения (0.25 / 0.5 / 1.0 pts)',
-        titleEn: '4.3 Motion Complexity (0.25 / 0.5 / 1.0 pts)',
-        contentRu: 'Простое движение (0.25 pts/кадр) — лёгкий покачивающийся idle. Среднее (0.5 pts) — бег/атака. Сложное (1.0 pts) — разворот тела, спецэффекты и динамика одежды.',
-        contentEn: 'Simple (0.25 pts/fr) — idle swaying. Medium (0.5 pts) — run/attack. Complex (1.0 pts) — full body rotation, cloth dynamics, particle FX.',
+        titleRu: '4.3 Тип сложности движения (0.5 / 1.0 / 2.0 pts)',
+        titleEn: '4.3 Motion Complexity (0.5 / 1.0 / 2.0 pts)',
+        contentRu: 'Простое движение (0.5 pts/кадр) — лёгкий покачивающийся idle. Умеренное (1.0 pts) — бег/атака. Сложное (2.0 pts) — разворот тела, спецэффекты и динамика одежды.',
+        contentEn: 'Simple (0.5 pts/fr) — idle swaying. Moderate (1.0 pts) — run/attack. Complex (2.0 pts) — full body rotation, cloth dynamics, particle FX.',
         actionHintRu: 'Кликните выбор сложности движения',
         actionHintEn: 'Click on motion complexity selector'
       }

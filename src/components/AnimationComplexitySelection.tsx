@@ -252,9 +252,9 @@ export function AnimationComplexitySelection({
       labelEn: 'Simple Animation',
       descRu: 'Смещение, покачивание или поворот готового объекта',
       descEn: 'Offset, sway, or rotation of an existing asset',
-      points: '0.25',
-      rateVal: 0.25,
-      framesForOnePt: 4,
+      points: '0.5',
+      rateVal: 0.5,
+      framesForOnePt: 2,
       color: '#10b981',
       glowColor: 'rgba(16,185,129,0.4)',
       glowBorder: 'rgba(16,185,129,0.5)',
@@ -269,13 +269,13 @@ export function AnimationComplexitySelection({
     medium: {
       id: 'medium' as const,
       nextId: 'complex' as const,
-      labelRu: 'Средняя анимация',
-      labelEn: 'Medium Animation',
+      labelRu: 'Умеренная анимация',
+      labelEn: 'Moderate Animation',
       descRu: 'Циклическая деформация, бег, атака или взмах крыльев',
       descEn: 'Cyclic deformation, running cycles, attacks, or wing flaps',
-      points: '0.5',
-      rateVal: 0.5,
-      framesForOnePt: 2,
+      points: '1.0',
+      rateVal: 1.0,
+      framesForOnePt: 1,
       color: '#f59e0b',
       glowColor: 'rgba(245,158,11,0.4)',
       glowBorder: 'rgba(245,158,11,0.5)',
@@ -294,9 +294,9 @@ export function AnimationComplexitySelection({
       labelEn: 'Complex Animation',
       descRu: 'Полноценные динамические спецэффекты (взрывы, магия, огонь, искры)',
       descEn: 'Full hand-drawn dynamic special effects (explosions, magic, fire, sparks)',
-      points: '1.0',
-      rateVal: 1.0,
-      framesForOnePt: 1,
+      points: '2.0',
+      rateVal: 2.0,
+      framesForOnePt: 0.5,
       color: '#d946ef',
       glowColor: 'rgba(217,70,239,0.45)',
       glowBorder: 'rgba(217,70,239,0.5)',
@@ -683,22 +683,22 @@ export function AnimationComplexitySelection({
                         <td className="p-2 sm:p-2.5 text-emerald-400 font-bold">
                           {lang === 'ru' ? 'Простая' : 'Simple'}
                         </td>
-                        <td className="p-2 sm:p-2.5 font-mono">0.25 pts</td>
-                        <td className="p-2 sm:p-2.5 font-mono font-extrabold text-white">4 {lang === 'ru' ? 'кадра' : 'frames'}</td>
+                        <td className="p-2 sm:p-2.5 font-mono">0.50 pts</td>
+                        <td className="p-2 sm:p-2.5 font-mono font-extrabold text-white">2 {lang === 'ru' ? 'кадра' : 'frames'}</td>
                         <td className="p-2 sm:p-2.5 font-mono text-emerald-300">
-                          +{Math.floor(safeFrames * 0.25)} pts
+                          +{Math.floor(safeFrames * 0.50)} pts
                         </td>
                       </tr>
 
                       {/* Medium */}
                       <tr className={value === 'medium' ? 'bg-amber-950/40 font-bold border-l-4 border-l-amber-400' : 'hover:bg-purple-950/20'}>
                         <td className="p-2 sm:p-2.5 text-amber-400 font-bold">
-                          {lang === 'ru' ? 'Средняя' : 'Medium'}
+                          {lang === 'ru' ? 'Умеренная' : 'Moderate'}
                         </td>
-                        <td className="p-2 sm:p-2.5 font-mono">0.50 pts</td>
-                        <td className="p-2 sm:p-2.5 font-mono font-extrabold text-white">2 {lang === 'ru' ? 'кадра' : 'frames'}</td>
+                        <td className="p-2 sm:p-2.5 font-mono">1.00 pt</td>
+                        <td className="p-2 sm:p-2.5 font-mono font-extrabold text-white">1 {lang === 'ru' ? 'кадр' : 'frame'}</td>
                         <td className="p-2 sm:p-2.5 font-mono text-amber-300">
-                          +{Math.floor(safeFrames * 0.50)} pts
+                          +{Math.floor(safeFrames * 1.00)} pts
                         </td>
                       </tr>
 
@@ -707,10 +707,10 @@ export function AnimationComplexitySelection({
                         <td className="p-2 sm:p-2.5 text-fuchsia-400 font-bold">
                           {lang === 'ru' ? 'Сложная' : 'Complex'}
                         </td>
-                        <td className="p-2 sm:p-2.5 font-mono">1.00 pt</td>
-                        <td className="p-2 sm:p-2.5 font-mono font-extrabold text-white">1 {lang === 'ru' ? 'кадр' : 'frame'}</td>
+                        <td className="p-2 sm:p-2.5 font-mono">2.00 pts</td>
+                        <td className="p-2 sm:p-2.5 font-mono font-extrabold text-white">0.5 {lang === 'ru' ? 'кадра' : 'frame'}</td>
                         <td className="p-2 sm:p-2.5 font-mono text-fuchsia-300">
-                          +{Math.floor(safeFrames * 1.00)} pts
+                          +{Math.floor(safeFrames * 2.00)} pts
                         </td>
                       </tr>
                     </tbody>

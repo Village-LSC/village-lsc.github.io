@@ -619,21 +619,6 @@ function SquareFrame({ cat, imagePath, lang, formatPrice }: SquareFrameProps) {
           </span>
         </div>
 
-        {/* 3. Примерная цена (популярное разрешение и среднее качество) */}
-        <div className="flex justify-between items-start border-t border-[#3d1a56] pt-2 text-xs sm:text-sm font-bold transition-all duration-300">
-          <div className="flex flex-col text-left max-w-[62%] pr-1">
-            <span className="text-[#ebd6f7]/70 group-hover:text-white/90 uppercase tracking-wider leading-tight">
-              {lang === 'ru' ? 'Примерная цена:' : 'Approx. price:'}
-            </span>
-            <span className="text-xs sm:text-sm text-purple-300 font-medium normal-case leading-tight mt-0.5">
-              {popularResText}
-            </span>
-          </div>
-          <span className="font-bold font-mono text-emerald-400 group-hover:text-emerald-300 transition-colors shrink-0 text-xs sm:text-sm mt-0.5">
-            ~{formatPrice(cat.popularPriceNum)}
-          </span>
-        </div>
-
       </div>
     </div>
   );
@@ -1756,7 +1741,7 @@ export default function App() {
       }
       
       const animComp = sprite.animComplexity || 'simple';
-      const animRate = animComp === 'complex' ? 1.0 : (animComp === 'medium' ? 0.5 : 0.25);
+      const animRate = animComp === 'complex' ? 2.0 : (animComp === 'medium' ? 1.0 : 0.5);
       framePoints = Math.floor(frames * animRate);
     }
 
@@ -1764,16 +1749,16 @@ export default function App() {
     const totalComplexity = cappedStaticPoints + framePoints;
     const isImpossible = totalComplexity > 100;
 
-    // Complexity multiplier: rate scales dynamically with complexity level (0.012 + PTS * 0.0002) up to 100 PTS.
-    // Above 100 PTS, each point adds +50% (+0.5 to multiplier / +50% markup of base price).
+    // Complexity multiplier: rate scales dynamically with complexity level (0.015 + PTS * 0.00025) up to 100 PTS.
+    // Above 100 PTS, each point adds +62.5% (+0.625 to multiplier / +62.5% markup of base price).
     let complexityMultiplier: number;
     if (totalComplexity <= 100) {
-      const ptsRate = 0.012 + (totalComplexity * 0.0002);
+      const ptsRate = 0.015 + (totalComplexity * 0.00025);
       complexityMultiplier = 1 + (totalComplexity * ptsRate);
     } else {
-      const baseMultiplierAt100 = 1 + (100 * (0.012 + 100 * 0.0002)); // 4.2
+      const baseMultiplierAt100 = 1 + (100 * (0.015 + 100 * 0.00025)); // 5.0
       const excessPts = totalComplexity - 100;
-      complexityMultiplier = baseMultiplierAt100 + (excessPts * 0.5);
+      complexityMultiplier = baseMultiplierAt100 + (excessPts * 0.625);
     }
     
     // Base Scaled Price multiplied by Complexity Markup
@@ -1993,13 +1978,13 @@ export default function App() {
       
       let mult: number;
       if (res.totalComplexity <= 100) {
-        const ptsRateItem = 0.012 + (res.totalComplexity * 0.0002);
+        const ptsRateItem = 0.015 + (res.totalComplexity * 0.00025);
         mult = 1 + res.totalComplexity * ptsRateItem;
         itemLog += `   • Complexity Multiplier: 1 + (${res.totalComplexity} * ${ptsRateItem.toFixed(4)}) = x${mult.toFixed(3)}\n`;
       } else {
         const excessPts = res.totalComplexity - 100;
-        mult = 4.2 + excessPts * 0.5;
-        itemLog += `   • Complexity Multiplier (Exceeds 100 PTS limit: +50%/pt above 100): 4.2 + (${excessPts} * 0.5) = x${mult.toFixed(3)}\n`;
+        mult = 5.0 + excessPts * 0.625;
+        itemLog += `   • Complexity Multiplier (Exceeds 100 PTS limit: +62.5%/pt above 100): 5.0 + (${excessPts} * 0.625) = x${mult.toFixed(3)}\n`;
       }
       
       let currentSubtotal = Math.round(res.baseCalculatedPrice * mult);
@@ -2779,7 +2764,7 @@ export default function App() {
                 <span className="text-[10px] font-bold text-purple-400 tracking-widest font-mono uppercase">
                   {lang === 'ru' ? 'КУРС ДОЛЛАРА (LIVE)' : 'USD EXCHANGE RATE'}
                 </span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-white leading-none mt-1 select-all">
+                <span className="text-xl sm:text-2xl font-black font-mono text-white leading-none mt-1 select-all whitespace-nowrap">
                   1 $ ≈ <span className="text-purple-300">{usdRate}</span> ₽
                 </span>
               </div>
@@ -3750,7 +3735,7 @@ export default function App() {
                                   ))}
                                 </ul>
                               </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-[#1a0729] p-2.5 rounded-lg border border-purple-500/20 text-xs">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-[#1a0729] p-2.5 rounded-lg border border-purple-500/20 text-xs">
                                 <div>
                                   <div className="text-purple-300/80 font-bold uppercase tracking-wider text-xs">
                                     {lang === 'ru' ? 'Начальная ставка:' : 'Starting rate:'}
@@ -3765,14 +3750,6 @@ export default function App() {
                                   </div>
                                   <div className="font-mono font-bold text-stone-200 mt-0.5">
                                     {lang === 'ru' ? activeCat.preferredSizeRu : activeCat.preferredSizeEn}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="text-purple-300/80 font-bold uppercase tracking-wider text-xs">
-                                    {lang === 'ru' ? 'Примерная цена:' : 'Approx. price:'}
-                                  </div>
-                                  <div className="font-mono font-bold text-emerald-400 mt-0.5">
-                                    ~{formatPrice(activeCat.popularPriceNum)} <span className="text-xs text-purple-300 font-normal">({lang === 'ru' ? activeCat.popularResRu : activeCat.popularResEn})</span>
                                   </div>
                                 </div>
                               </div>

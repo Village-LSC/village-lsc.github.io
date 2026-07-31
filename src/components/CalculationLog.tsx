@@ -309,13 +309,13 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                             </thead>
                             <tbody className="divide-y divide-[#3d1a56]/40 text-[#ebd6f7]">
                               {[
-                                { pts: '0 – 10 pts', nameRu: 'Низкая', nameEn: 'Low', markup: '+0% … +10%', ex: '400 ₽ … 1 100 ₽' },
-                                { pts: '11 – 20 pts', nameRu: 'Оптимальная', nameEn: 'Optimal', markup: '+15% … +25%', ex: '1 150 ₽ … 1 250 ₽' },
-                                { pts: '21 – 30 pts', nameRu: 'Средняя', nameEn: 'Medium', markup: '+30% … +45%', ex: '1 300 ₽ … 1 450 ₽' },
-                                { pts: '31 – 40 pts', nameRu: 'Умеренная', nameEn: 'Moderate', markup: '+50% … +70%', ex: '1 500 ₽ … 1 700 ₽' },
-                                { pts: '41 – 50 pts', nameRu: 'Сложная', nameEn: 'Complex', markup: '+75% … +100%', ex: '1 750 ₽ … 2 000 ₽' },
-                                { pts: '51 – 100 pts', nameRu: 'Экстремальная', nameEn: 'Extreme', markup: '+105% … +275%', ex: '2 050 ₽ … 3 750 ₽' },
-                                { pts: '> 100 pts', nameRu: 'Максимальная', nameEn: 'Maximum', markup: '> +275% (+50%/pt)', ex: '3 800 ₽+' }
+                                { pts: '0 – 10 pts', nameRu: 'Низкая', nameEn: 'Low', markup: '+0% … +17.5%', ex: '1 000 ₽ … 1 175 ₽' },
+                                { pts: '11 – 20 pts', nameRu: 'Оптимальная', nameEn: 'Optimal', markup: '+19.5% … +40%', ex: '1 195 ₽ … 1 400 ₽' },
+                                { pts: '21 – 30 pts', nameRu: 'Средняя', nameEn: 'Medium', markup: '+42.5% … +67.5%', ex: '1 425 ₽ … 1 675 ₽' },
+                                { pts: '31 – 40 pts', nameRu: 'Умеренная', nameEn: 'Moderate', markup: '+70.5% … +100%', ex: '1 705 ₽ … 2 000 ₽' },
+                                { pts: '41 – 50 pts', nameRu: 'Сложная', nameEn: 'Complex', markup: '+103.5% … +137.5%', ex: '2 035 ₽ … 2 375 ₽' },
+                                { pts: '51 – 100 pts', nameRu: 'Экстремальная', nameEn: 'Extreme', markup: '+141.5% … +400%', ex: '2 415 ₽ … 5 000 ₽' },
+                                { pts: '> 100 pts', nameRu: 'Максимальная', nameEn: 'Maximum', markup: '> +400% (+62.5%/pt)', ex: '5 063 ₽+' }
                               ].map((row, cIdx) => (
                                 <tr key={cIdx} className="hover:bg-purple-900/20 transition-colors">
                                   <td className="p-2.5 font-bold text-fuchsia-300">{row.pts}</td>
@@ -448,7 +448,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                             {item.hasAnimation && (
                               <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg bg-cyan-950/90 text-cyan-200 border border-cyan-400/50 shadow-sm flex items-center gap-1.5">
                                 <Zap className="w-3.5 h-3.5 text-cyan-300" />
-                                {item.frames} {isRu ? 'кадров' : 'frames'} ({item.animComplexity === 'complex' ? '1.0' : item.animComplexity === 'medium' ? '0.5' : '0.25'} {isRu ? 'pts/кадр' : 'pts/frame'})
+                                {item.frames} {isRu ? 'кадров' : 'frames'} ({item.animComplexity === 'complex' ? '2.0' : item.animComplexity === 'medium' ? '1.0' : '0.5'} {isRu ? 'pts/кадр' : 'pts/frame'})
                               </span>
                             )}
 
@@ -517,7 +517,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
 
                                           {item.hasAnimation && (
                                             <div className="flex justify-between text-amber-300">
-                                              <span>• {isRu ? 'Анимация' : 'Anim'} ({item.frames} {isRu ? 'кадров' : 'frames'} × {item.animComplexity === 'complex' ? '1.0' : item.animComplexity === 'medium' ? '0.5' : '0.25'} pts):</span>
+                                              <span>• {isRu ? 'Анимация' : 'Anim'} ({item.frames} {isRu ? 'кадров' : 'frames'} × {item.animComplexity === 'complex' ? '2.0' : item.animComplexity === 'medium' ? '1.0' : '0.5'} pts):</span>
                                               <span>+{item.framePoints ?? item.animPoints ?? 0} pts</span>
                                             </div>
                                           )}

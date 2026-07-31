@@ -56,8 +56,8 @@ export function TotalComplexityCard({ calculated, sprite, lang }: TotalComplexit
         textColor: 'text-red-400 font-black tracking-widest uppercase animate-pulse',
         labelEn: 'Maximum',
         labelRu: 'Максимальная',
-        descEn: 'You have exceeded complexity limits! Now each complexity point adds 50% to the order cost! It is strongly discouraged to order above 100 complexity!',
-        descRu: 'Вы превысили лимиты сложности, теперь каждое очко сложности прибавляет 50% к стоимости заказа! Крайне не рекомендуется заказывать выше 100 сложности!',
+        descEn: 'You have exceeded complexity limits! Now each complexity point adds 62.5% to the order cost! It is strongly discouraged to order above 100 complexity!',
+        descRu: 'Вы превысили лимиты сложности, теперь каждое очко сложности прибавляет 62.5% к стоимости заказа! Крайне не рекомендуется заказывать выше 100 сложности!',
         IconComponent: Settings,
         gradientBg: 'linear-gradient(270deg, rgba(239, 68, 68, 0.45) 0%, rgba(244, 63, 94, 0.22) 50%, rgba(239, 68, 68, 0.05) 80%, transparent 100%)',
         colorHex: '#ef4444',
@@ -291,8 +291,8 @@ export function TotalComplexityCard({ calculated, sprite, lang }: TotalComplexit
                 {sprite.hasAnimation && (
                   <span className="text-xs font-mono font-extrabold bg-cyan-950/90 text-cyan-100 border border-cyan-400/60 px-2.5 py-1 rounded-full shadow-[0_2px_12px_rgba(6,182,212,0.25)] transition-all drop-shadow-[0_2px_12px_rgba(6,182,212,0.25)] drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.9)]">
                     {lang === 'ru'
-                      ? `Анимация (${calculated.animComplexity === 'complex' ? '1.0' : calculated.animComplexity === 'medium' ? '0.5' : '0.25'} pts/кадр): +${calculated.framePoints ?? 0}`
-                      : `Animation (${calculated.animComplexity === 'complex' ? '1.0' : calculated.animComplexity === 'medium' ? '0.5' : '0.25'} pts/frame): +${calculated.framePoints ?? 0}`}
+                      ? `Анимация (${calculated.animComplexity === 'complex' ? '2.0' : calculated.animComplexity === 'medium' ? '1.0' : '0.5'} pts/кадр): +${calculated.framePoints ?? 0}`
+                      : `Animation (${calculated.animComplexity === 'complex' ? '2.0' : calculated.animComplexity === 'medium' ? '1.0' : '0.5'} pts/frame): +${calculated.framePoints ?? 0}`}
                   </span>
                 )}
                 {sprite.styleMode === 'specific' && (

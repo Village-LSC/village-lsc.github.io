@@ -42,6 +42,32 @@
   },
   "templates": [
     {
+       "id": "rpg_items",
+      "categoryId": "1",
+      "iconName": "sword",
+      "image": "",
+      "badgeRu": "Кат. 1 • Предметы",
+      "badgeEn": "Cat. 1 • Items",
+      "titleRu": "Предметы и Экипировка",
+      "titleEn": "Items & Equipment",
+      "descRu": "Набор спрайтов оружия, брони, зелий, свитков или артефактов в едином визуальном стиле для инвентаря.",
+      "descEn": "Set of sprite weapons, armor, potions, scrolls, or artifacts in unified style for game inventory.",
+      "approxPriceRangeRu": "240 – 380 ₽ / шт.",
+      "approxPriceRangeEn": "240 – 380 ₽ / pcs",
+      "approxBasePrice": 310,
+      "defaultWidth": 32,
+      "defaultHeight": 32,
+      "defaultCountOrig": 5,
+      "defaultCountVar": 0,
+      "hasAnimation": false,
+      "defaultDuration": 1.0,
+      "defaultQuality": "optimal",
+      "defaultAnimComplexity": "simple",
+      "defaultDetailLevel": "moderate",
+      "defaultTaskDescRu": "Сет из 5 предметов для RPG: меч паладина, рунический щит, зелье здоровья, свитер странника, золотое кольцо.",
+      "defaultTaskDescEn": "Set of 5 RPG items: paladin sword, runic shield, health potion, traveler cloak, golden ring.",
+      "defaultAnimDescRu": "",
+      "defaultAnimDescEn": ""
     }
   ]
 }

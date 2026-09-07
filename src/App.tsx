@@ -40,16 +40,23 @@ import {
   Tv,
   Gamepad2,
   Image as ImageIcon,
-  RefreshCw
+  RefreshCw,
+  Sliders,
+  Glasses
 } from 'lucide-react';
 import {
   Language,
   Currency,
   CategoryData,
   SpriteItemState,
+  TemplateItemState,
   CATEGORIES_LIST,
   TRANSLATIONS,
-  getQualityPoints
+  getQualityPoints,
+  PriceRange,
+  getSizeTier,
+  COMPLEXITY_MULTIPLIER,
+  ANIMATION_FLAT
 } from './types';
 import { CURRENT_LOAD_STATUS } from './loadStatus';
 import { PixelMorphAnimation } from './components/PixelMorphAnimation';
@@ -60,6 +67,8 @@ import { AnimationComplexitySelection } from './components/AnimationComplexitySe
 import { TotalComplexityCard } from './components/TotalComplexityCard';
 import { CalculationLog } from './components/CalculationLog';
 import { InteractiveTutorial, FloatingTutorialPrompt } from './components/InteractiveTutorial';
+import { TemplateCalculator } from './components/TemplateCalculator';
+import { CALCULATOR_TEMPLATES } from './data/templates';
 
 function DitherNebula({ isExpanded }: { isExpanded: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1119,6 +1128,34 @@ export default function App() {
     });
   };
 
+  // Accessible Mode for visually impaired (Режим для слабовидящих - по умолчанию выключен)
+  const [isAccessibleMode, setIsAccessibleMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('isAccessibleMode');
+      return saved !== null ? saved === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleAccessibleMode = () => {
+    setIsAccessibleMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('isAccessibleMode', String(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (isAccessibleMode) {
+      document.documentElement.classList.add('accessible-mode');
+    } else {
+      document.documentElement.classList.remove('accessible-mode');
+    }
+  }, [isAccessibleMode]);
+
   // Sprite Items State in Calculator
   const [sprites, setSprites] = useState<SpriteItemState[]>([
     {
@@ -1136,9 +1173,125 @@ export default function App() {
       animDelay: 0.5,
       description: '',
       templateSize: '16',
-      quality: 'optimal'
+      quality: 'optimal',
+      priceMode: 'auto'
     }
   ]);
+
+  // Calculator Mode: 'template' (Шаблонный) vs 'granular' (Точечный)
+  const [calcMode, setCalcMode] = useState<'template' | 'granular'>('template');
+
+  // Template-based calculator states (supports multiple template assets)
+  const [templateItems, setTemplateItems] = useState<TemplateItemState[]>([
+    {
+      id: 1,
+      templateId: 'rpg_items',
+      count: 5,
+      hasAnimation: false,
+      animDesc: '',
+      animDuration: 1.0,
+      quality: 'optimal',
+      taskDesc: '',
+    },
+  ]);
+
+  const handleAddTemplateItem = () => {
+    const defaultTmpl = CALCULATOR_TEMPLATES[0];
+    const newId = Date.now();
+    const newItem: TemplateItemState = {
+      id: newId,
+      templateId: defaultTmpl.id,
+      count: defaultTmpl.defaultCountOrig || 1,
+      hasAnimation: defaultTmpl.hasAnimation || false,
+      animDesc: lang === 'ru' ? defaultTmpl.defaultAnimDescRu : defaultTmpl.defaultAnimDescEn,
+      animDuration: defaultTmpl.defaultDuration || 1.0,
+      quality: defaultTmpl.defaultQuality || 'optimal',
+      taskDesc: '',
+    };
+    setTemplateItems((prev) => [...prev, newItem]);
+    triggerToast(
+      lang === 'ru' ? 'Новый шаблонный ассет добавлен!' : 'New template asset added!',
+      'success'
+    );
+  };
+
+  const handleRemoveTemplateItem = (id: number) => {
+    if (templateItems.length <= 1) return;
+    setTemplateItems((prev) => prev.filter((item) => item.id !== id));
+    triggerToast(
+      lang === 'ru' ? 'Шаблонный ассет удалён' : 'Template asset removed',
+      'info'
+    );
+  };
+
+  const handleUpdateTemplateItem = <K extends keyof TemplateItemState>(
+    id: number,
+    field: K,
+    value: TemplateItemState[K]
+  ) => {
+    setTemplateItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        if (field === 'templateId') {
+          const tmpl = CALCULATOR_TEMPLATES.find((t) => t.id === value);
+          if (tmpl) {
+            return {
+              ...item,
+              templateId: tmpl.id,
+              count: tmpl.defaultCountOrig || item.count,
+              hasAnimation: tmpl.hasAnimation,
+              animDuration: tmpl.defaultDuration || 1.0,
+              animDesc: lang === 'ru' ? tmpl.defaultAnimDescRu : tmpl.defaultAnimDescEn,
+              quality: tmpl.defaultQuality || 'optimal',
+            };
+          }
+        }
+        return { ...item, [field]: value };
+      })
+    );
+  };
+
+  // Virtual Sprite Items representing the Template Assets for calculation engines
+  const templateSprites = useMemo<SpriteItemState[]>(() => {
+    return templateItems.map((item) => {
+      const tmpl =
+        CALCULATOR_TEMPLATES.find((t) => t.id === item.templateId) ||
+        CALCULATOR_TEMPLATES[0];
+      return {
+        id: item.id,
+        categoryId: tmpl.categoryId,
+        width: tmpl.defaultWidth,
+        height: tmpl.defaultHeight,
+        skinType: tmpl.categoryId === '7' && (tmpl.defaultWidth >= 128 || tmpl.defaultHeight >= 128) ? '2' : '1',
+        countOrig: item.count,
+        countVar: 0,
+        hasAnimation: item.hasAnimation,
+        frameMode: 'direct',
+        framesDirect: item.hasAnimation
+          ? Math.max(2, Math.round(item.animDuration / 0.15))
+          : 1,
+        animDuration: item.animDuration,
+        animDelay: 0.15,
+        description:
+          item.taskDesc.trim() ||
+          (lang === 'ru' ? tmpl.defaultTaskDescRu : tmpl.defaultTaskDescEn),
+        templateSize: `${tmpl.defaultWidth}x${tmpl.defaultHeight}`,
+        quality: item.quality,
+        isometry: false,
+        detailLevel:
+          item.quality === 'best'
+            ? 'detailed'
+            : item.quality === 'medium'
+            ? 'moderate'
+            : 'simple',
+        animComplexity: tmpl.defaultAnimComplexity || 'simple',
+        designMode: 'scratch',
+        styleMode: 'free',
+        priceMode: 'auto',
+        manualPrice: 0,
+      };
+    });
+  }, [templateItems, lang]);
 
   // Global settings
   const [speedRate, setSpeedRate] = useState<number>(1.0); // 1.0 Moderate, 1.25 Priority
@@ -1172,6 +1325,108 @@ export default function App() {
   const [validationError, setValidationError] = useState<boolean>(false);
   const [spriteCounter, setSpriteCounter] = useState<number>(1);
   const [expandedSprites, setExpandedSprites] = useState<{ [key: number]: boolean }>({ 1: true });
+
+  const handleConvertToGranular = () => {
+    const convertedSprites: SpriteItemState[] = templateItems.map((item, idx) => {
+      const tmpl =
+        CALCULATOR_TEMPLATES.find((t) => t.id === item.templateId) ||
+        CALCULATOR_TEMPLATES[0];
+      const newSpriteId = Date.now() + idx;
+      return {
+        id: newSpriteId,
+        categoryId: tmpl.categoryId,
+        width: tmpl.defaultWidth,
+        height: tmpl.defaultHeight,
+        skinType: tmpl.categoryId === '7' && (tmpl.defaultWidth >= 128 || tmpl.defaultHeight >= 128) ? '2' : '1',
+        countOrig: item.count,
+        countVar: 0,
+        hasAnimation: item.hasAnimation,
+        frameMode: 'direct',
+        framesDirect: item.hasAnimation
+          ? Math.max(2, Math.round(item.animDuration / 0.15))
+          : 1,
+        animDuration: item.animDuration,
+        animDelay: 0.15,
+        description:
+          item.taskDesc.trim() ||
+          (lang === 'ru' ? tmpl.defaultTaskDescRu : tmpl.defaultTaskDescEn),
+        templateSize: `${tmpl.defaultWidth}x${tmpl.defaultHeight}`,
+        quality: item.quality,
+        isometry: false,
+        detailLevel:
+          item.quality === 'best'
+            ? 'detailed'
+            : item.quality === 'medium'
+            ? 'moderate'
+            : 'simple',
+        animComplexity: tmpl.defaultAnimComplexity || 'simple',
+        designMode: 'scratch',
+        styleMode: 'free',
+        priceMode: 'auto',
+        manualPrice: 0,
+      };
+    });
+
+    setSprites(convertedSprites);
+    const expMap: { [key: number]: boolean } = {};
+    convertedSprites.forEach((s) => {
+      expMap[s.id] = true;
+    });
+    setExpandedSprites(expMap);
+    setCalcMode('granular');
+
+    triggerToast(
+      lang === 'ru'
+        ? `Все шаблоны (${convertedSprites.length} шт.) перенесены в точечный расчёт! Теперь вы можете вручную настроить все параметры.`
+        : `All templates (${convertedSprites.length} pcs) converted to granular calculation! You can now adjust all settings manually.`,
+      'success'
+    );
+
+    setTimeout(() => {
+      const calcEl = document.getElementById('calc-anchored-form');
+      if (calcEl) {
+        calcEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const getTemplateItemPrice = (item: TemplateItemState) => {
+    const tmpl =
+      CALCULATOR_TEMPLATES.find((t) => t.id === item.templateId) ||
+      CALCULATOR_TEMPLATES[0];
+    const virtualSprite: SpriteItemState = {
+      id: item.id,
+      categoryId: tmpl.categoryId,
+      width: tmpl.defaultWidth,
+      height: tmpl.defaultHeight,
+      skinType: tmpl.categoryId === '7' && (tmpl.defaultWidth >= 128 || tmpl.defaultHeight >= 128) ? '2' : '1',
+      countOrig: item.count,
+      countVar: 0,
+      hasAnimation: item.hasAnimation,
+      frameMode: 'direct',
+      framesDirect: item.hasAnimation
+        ? Math.max(2, Math.round(item.animDuration / 0.15))
+        : 1,
+      animDuration: item.animDuration,
+      animDelay: 0.15,
+      description: item.taskDesc,
+      templateSize: `${tmpl.defaultWidth}x${tmpl.defaultHeight}`,
+      quality: item.quality,
+      isometry: false,
+      detailLevel:
+        item.quality === 'best'
+          ? 'detailed'
+          : item.quality === 'medium'
+          ? 'moderate'
+          : 'simple',
+      animComplexity: tmpl.defaultAnimComplexity || 'simple',
+    };
+    const priceResult = calculateSpritePrice(virtualSprite);
+    return {
+      totalPrice: priceResult.totalPrice,
+      priceRange: priceResult.priceRange,
+    };
+  };
   const [renamingSpriteId, setRenamingSpriteId] = useState<number | null>(null);
   const [activeSpecTab, setActiveSpecTab] = useState<'visual' | 'text' | 'guide'>('visual');
   const [showPrepaymentBrackets, setShowPrepaymentBrackets] = useState<boolean>(false);
@@ -1207,10 +1462,11 @@ export default function App() {
   // Generate configuration seed dynamically on state change
   const generatedSeed = useMemo(() => {
     try {
+      const activeSeedSprites = calcMode === 'template' ? templateSprites : sprites;
       const data = {
         v: 1,
         s: speedRate,
-        items: sprites.map(s => ({
+        items: activeSeedSprites.map(s => ({
           c: s.categoryId,
           w: s.width,
           h: s.height,
@@ -1226,7 +1482,9 @@ export default function App() {
           ac: s.animComplexity || 'simple',
           dm: s.designMode || 'reference',
           sm: s.styleMode || 'free',
-          sn: s.styleName || ''
+          sn: s.styleName || '',
+          pm: s.priceMode || 'auto',
+          mp: s.manualPrice ?? 0
         }))
       };
       const json = JSON.stringify(data);
@@ -1236,7 +1494,7 @@ export default function App() {
       console.error('Error generating seed:', e);
       return '';
     }
-  }, [sprites, speedRate]);
+  }, [sprites, calcMode, templateSprites, speedRate]);
 
   // Decode and apply a configuration seed to the calculator state
   const applySeed = (seedStr: string) => {
@@ -1290,7 +1548,9 @@ export default function App() {
             animComplexity: animComp as 'simple' | 'medium' | 'complex',
             designMode: designMd as 'reference' | 'scratch',
             styleMode: styleMd as 'free' | 'specific',
-            styleName: styleNm
+            styleName: styleNm,
+            priceMode: item.pm === 'manual' ? 'manual' : 'auto',
+            manualPrice: typeof item.mp === 'number' && item.mp > 0 ? item.mp : undefined
           };
         });
         
@@ -1596,11 +1856,26 @@ export default function App() {
     }
   };
 
-  // Helper to format currency
-  const formatPrice = (rubValue: number) => {
+  // Helper to format currency or price range (clean, no unnecessary symbols)
+  const formatPrice = (value: number | PriceRange | undefined | null) => {
+    if (value === undefined || value === null) return '0 ₽';
+    if (typeof value === 'object' && 'low' in value && 'high' in value) {
+      if (value.low === value.high) {
+        return formatPrice(value.low);
+      }
+      if (currency === 'usd') {
+        const lowUsd = (value.low / usdRate).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+        const highUsd = (value.high / usdRate).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+        return `$${lowUsd} – $${highUsd}`;
+      }
+      const lowRub = value.low.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US');
+      const highRub = value.high.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US');
+      return `${lowRub} – ${highRub} ₽`;
+    }
+    const rubValue = value;
     if (currency === 'usd') {
       const usdValue = rubValue / usdRate;
-      return `$${usdValue.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `$${usdValue.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
     }
     return `${rubValue.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US')} ₽`;
   };
@@ -1636,99 +1911,61 @@ export default function App() {
   const calculateSpritePrice = (sprite: SpriteItemState) => {
     const cat = CATEGORIES_LIST.find(c => c.id === sprite.categoryId) || CATEGORIES_LIST[0];
     
+    // Bug 5 fix: explicit handling of oversized canvas
     const isInvalidSize = sprite.categoryId !== '7' && (sprite.width > 1000 || sprite.height > 1000);
     
-    let baseCalculatedPrice = cat.basePrice;
-    let sizeFactor = 0;
-    let sizeInfo = '';
-    let baseDiscountPercent = 0;
-    let canvasScale = 1.0;
-    
-    // Standard resolution sizing size factor (works for all categories including skins)
-    if (sprite.categoryId === '7') {
-      const isHD = sprite.skinType === '2';
-      sizeFactor = isHD ? 128 : 64;
-      sizeInfo = isHD ? '128×128 px (HD)' : '64×64 px (Standard)';
-      const minSize = cat.minBaseSize || 64;
-      const rawScale = Math.pow((sizeFactor * sizeFactor) / (minSize * minSize), 0.35);
-      canvasScale = isHD ? rawScale * 1.15 : rawScale;
-      baseCalculatedPrice = Math.round(Math.max(cat.basePrice * canvasScale, 150));
-      baseDiscountPercent = 0;
-    } else {
-      const w = Math.max(1, sprite.width);
-      const h = Math.max(1, sprite.height);
-      sizeFactor = Math.round(Math.sqrt(w * h));
-      sizeInfo = `${w}×${h} px`;
-      
-      const minSize = cat.minBaseSize || 16;
-      canvasScale = Math.pow((w * h) / (minSize * minSize), 0.35);
-      baseCalculatedPrice = Math.round(Math.max(cat.basePrice * canvasScale, 150));
-      
-      if (canvasScale < 1.0) {
-        baseDiscountPercent = Math.max(0, Math.min(80, Math.round((1 - canvasScale) * 100)));
-      } else {
-        baseDiscountPercent = 0;
-      }
+    // 1. Size Tier lookup & scale multiplier
+    const { tier: sizeTier, scaleMultiplier } = getSizeTier(
+      sprite.categoryId,
+      sprite.width,
+      sprite.height,
+      sprite.skinType
+    );
+
+    const isSkin = sprite.categoryId === '7';
+    const sizeInfo = isSkin
+      ? (sprite.skinType === '2' ? '128×128 px (HD)' : '64×64 px (Standard)')
+      : `${Math.max(1, sprite.width)}×${Math.max(1, sprite.height)} px`;
+    const sizeFactor = isSkin
+      ? (sprite.skinType === '2' ? 128 : 64)
+      : Math.round(Math.sqrt(Math.max(1, sprite.width) * Math.max(1, sprite.height)));
+
+    // Base tier price range
+    let tierLow = sizeTier.price.low * scaleMultiplier;
+    let tierHigh = sizeTier.price.high * scaleMultiplier;
+
+    // 2. Complexity Tier multiplier
+    const detailLevel: 'simple' | 'moderate' | 'detailed' = sprite.detailLevel || (sprite.quality === 'best' ? 'detailed' : sprite.quality === 'medium' ? 'moderate' : 'simple');
+    const compTierKey: 'simple' | 'medium' | 'detailed' = detailLevel === 'detailed' ? 'detailed' : detailLevel === 'moderate' ? 'medium' : 'simple';
+    const compMultiplier = COMPLEXITY_MULTIPLIER[compTierKey];
+
+    tierLow *= compMultiplier.low;
+    tierHigh *= compMultiplier.high;
+
+    // 3. Flags: Isometry, Scratch Design, Specific Style
+    // Bug 1 fix: Isometry is applied once as a clean range multiplier (1.30–1.50×), not double-counted in PTS!
+    const isometry = (sprite.categoryId === '7' || sprite.categoryId === '2') ? false : (sprite.isometry || false);
+    if (isometry) {
+      tierLow *= 1.30;
+      tierHigh *= 1.50;
     }
 
-    // Complexity score calculation strictly from quality level & option toggles
-    const detailLevel = sprite.detailLevel || (sprite.quality === 'best' ? 'detailed' : sprite.quality === 'medium' ? 'moderate' : 'simple');
-    const detailPointsRaw = getQualityPoints(sprite.categoryId, detailLevel);
-    
     const designMode = sprite.designMode || 'reference';
+    if (designMode === 'scratch') {
+      tierLow *= 1.10;
+      tierHigh *= 1.20;
+    }
+
     const styleMode = sprite.styleMode || 'free';
     const styleName = sprite.styleName || '';
-    const isometry = (sprite.categoryId === '7' || sprite.categoryId === '2') ? false : (sprite.isometry || false);
-
-    const designPointsRaw = designMode === 'scratch' ? 10 : 0;
-
-    // Standard static complexity components (unscaled)
-    const baseBeforeStyleRaw = detailPointsRaw + designPointsRaw;
-    const stylePointsRaw = styleMode === 'specific' ? Math.max(1, Math.round(baseBeforeStyleRaw * 0.30)) : 0;
-    const baseBeforeIsoRaw = detailPointsRaw + designPointsRaw + stylePointsRaw;
-    const isoPointsRaw = (isometry && sprite.categoryId !== '7' && sprite.categoryId !== '2') ? Math.round(baseBeforeIsoRaw * 0.5) : 0;
-
-    // Dynamic static complexity scale based on canvas resolution vs category standard resolution (cat.minBaseSize):
-    // For smaller resolutions, complexity points are scaled down proportionally, up to a dynamic cap.
-    const stdSize = cat.minBaseSize || 32;
-    const sizeRatio = Math.max(0, Math.min(1, sizeFactor / stdSize));
-    const staticCap = Math.round(40 + 60 * sizeRatio);
-    const scaleFactor = staticCap / 100;
-
-    // Scaled-down complexity point contributions
-    let detailPoints = Math.round(detailPointsRaw * scaleFactor);
-    let designPoints = Math.round(designPointsRaw * scaleFactor);
-    let stylePoints = Math.round(stylePointsRaw * scaleFactor);
-    let isoPoints = Math.round(isoPointsRaw * scaleFactor);
-
-    const rawStaticPoints = detailPointsRaw + designPointsRaw + stylePointsRaw + isoPointsRaw;
-    let cappedStaticPoints = detailPoints + designPoints + stylePoints + isoPoints;
-    
-    if (cappedStaticPoints > staticCap) {
-      // Adjust components down to sum up exactly to staticCap
-      let diff = cappedStaticPoints - staticCap;
-      while (diff > 0) {
-        if (detailPoints >= isoPoints && detailPoints >= stylePoints && detailPoints >= designPoints && detailPoints > 0) {
-          detailPoints--;
-        } else if (isoPoints >= detailPoints && isoPoints >= stylePoints && isoPoints >= designPoints && isoPoints > 0) {
-          isoPoints--;
-        } else if (stylePoints >= detailPoints && stylePoints >= isoPoints && stylePoints >= designPoints && stylePoints > 0) {
-          stylePoints--;
-        } else if (designPoints >= detailPoints && designPoints >= isoPoints && designPoints >= stylePoints && designPoints > 0) {
-          designPoints--;
-        } else {
-          break;
-        }
-        diff--;
-      }
-      cappedStaticPoints = detailPoints + designPoints + stylePoints + isoPoints;
+    if (styleMode === 'specific') {
+      tierLow *= 1.10;
+      tierHigh *= 1.25;
     }
-    
-    // Animation frame calculation and modifier: gives complexity points (PTS) based on frames and complexity level
+
+    // 4. Animation Flat Addition
     let frames = 1;
     let animModeLogText = t.standardText;
-    let framePoints = 0;
-
     if (sprite.hasAnimation && cat.supportsAnimation) {
       if (sprite.frameMode === 'direct') {
         frames = Math.max(1, sprite.framesDirect);
@@ -1739,77 +1976,102 @@ export default function App() {
         frames = Math.max(1, Math.round(duration / delay));
         animModeLogText = `${t.animMethodCalc}: ${duration}s / ${delay}s = ${frames} ${t.tzFrames}`;
       }
-      
-      const animComp = sprite.animComplexity || 'simple';
-      const animRate = animComp === 'complex' ? 2.0 : (animComp === 'medium' ? 1.0 : 0.5);
-      framePoints = Math.floor(frames * animRate);
     }
 
-    // Total PTS score includes capped static complexity points + framePoints
+    let animTierKey: 'none' | 'simple' | 'medium' | 'complex' = 'none';
+    if (sprite.hasAnimation && cat.supportsAnimation && frames > 1) {
+      const userComp = sprite.animComplexity || 'simple';
+      if (frames >= 9 || userComp === 'complex') {
+        animTierKey = 'complex';
+      } else if (frames >= 5 || userComp === 'medium') {
+        animTierKey = 'medium';
+      } else {
+        animTierKey = 'simple';
+      }
+    }
+    const animFlat = ANIMATION_FLAT[animTierKey];
+    tierLow += animFlat.low;
+    tierHigh += animFlat.high;
+
+    // 5. Clean rounding to 50 ₽
+    const autoSingleLow = Math.max(50, Math.floor(tierLow / 50) * 50);
+    const autoSingleHigh = Math.max(autoSingleLow, Math.ceil(tierHigh / 50) * 50);
+
+    const isManualPrice = sprite.priceMode === 'manual' && typeof sprite.manualPrice === 'number' && sprite.manualPrice >= 0;
+    const singleLow = isManualPrice ? Math.max(0, sprite.manualPrice!) : autoSingleLow;
+    const singleHigh = isManualPrice ? Math.max(0, sprite.manualPrice!) : autoSingleHigh;
+    const singlePriceRange: PriceRange = { low: singleLow, high: singleHigh };
+    const animatedSinglePrice = Math.round((singleLow + singleHigh) / 2);
+
+    // Variations (50% value of original range):
+    const singleVarLow = isManualPrice 
+      ? Math.round(singleLow * 0.5) 
+      : Math.max(25, Math.floor((singleLow * 0.5) / 25) * 25);
+    const singleVarHigh = isManualPrice 
+      ? Math.round(singleHigh * 0.5) 
+      : Math.max(singleVarLow, Math.ceil((singleHigh * 0.5) / 25) * 25);
+    const singleVarPriceRange: PriceRange = { low: singleVarLow, high: singleVarHigh };
+    const singleVarPrice = Math.round((singleVarLow + singleVarHigh) / 2);
+
+    // Block Totals (Originals + Variations):
+    const blockOrigLow = singleLow * sprite.countOrig;
+    const blockOrigHigh = singleHigh * sprite.countOrig;
+    const blockOrigRange: PriceRange = { low: blockOrigLow, high: blockOrigHigh };
+
+    const blockVarLow = singleVarLow * sprite.countVar;
+    const blockVarHigh = singleVarHigh * sprite.countVar;
+    const blockVarRange: PriceRange = { low: blockVarLow, high: blockVarHigh };
+
+    const totalBlockLow = isInvalidSize ? 0 : (blockOrigLow + blockVarLow);
+    const totalBlockHigh = isInvalidSize ? 0 : (blockOrigHigh + blockVarHigh);
+    const priceRange: PriceRange = { low: totalBlockLow, high: totalBlockHigh };
+    const totalBlockPrice = Math.round((totalBlockLow + totalBlockHigh) / 2);
+
+    // PTS statistics for informational display in TotalComplexityCard and logs
+    const detailPointsRaw = getQualityPoints(sprite.categoryId, detailLevel);
+    const designPointsRaw = designMode === 'scratch' ? 10 : 0;
+    const stylePointsRaw = styleMode === 'specific' ? Math.max(1, Math.round((detailPointsRaw + designPointsRaw) * 0.30)) : 0;
+    const isoPointsRaw = isometry ? Math.round((detailPointsRaw + designPointsRaw + stylePointsRaw) * 0.5) : 0;
+
+    const stdSize = cat.minBaseSize || 32;
+    const sizeRatio = Math.max(0, Math.min(1, sizeFactor / stdSize));
+    const staticCap = Math.round(40 + 60 * sizeRatio);
+    const scaleFactor = staticCap / 100;
+
+    let detailPoints = Math.round(detailPointsRaw * scaleFactor);
+    let designPoints = Math.round(designPointsRaw * scaleFactor);
+    let stylePoints = Math.round(stylePointsRaw * scaleFactor);
+    let isoPoints = Math.round(isoPointsRaw * scaleFactor);
+
+    const animRate = sprite.animComplexity === 'complex' ? 2.0 : (sprite.animComplexity === 'medium' ? 1.0 : 0.5);
+    const framePoints = (sprite.hasAnimation && cat.supportsAnimation) ? Math.floor(frames * animRate) : 0;
+
+    const cappedStaticPoints = detailPoints + designPoints + stylePoints + isoPoints;
     const totalComplexity = cappedStaticPoints + framePoints;
     const isImpossible = totalComplexity > 100;
 
-    // Complexity multiplier: rate scales dynamically with complexity level (0.015 + PTS * 0.00025) up to 100 PTS.
-    // Above 100 PTS, each point adds +62.5% (+0.625 to multiplier / +62.5% markup of base price).
-    let complexityMultiplier: number;
-    if (totalComplexity <= 100) {
-      const ptsRate = 0.015 + (totalComplexity * 0.00025);
-      complexityMultiplier = 1 + (totalComplexity * ptsRate);
-    } else {
-      const baseMultiplierAt100 = 1 + (100 * (0.015 + 100 * 0.00025)); // 5.0
-      const excessPts = totalComplexity - 100;
-      complexityMultiplier = baseMultiplierAt100 + (excessPts * 0.625);
-    }
-    
-    // Base Scaled Price multiplied by Complexity Markup
-    let animatedSinglePrice = Math.round(baseCalculatedPrice * complexityMultiplier);
-
-    // Perspective (Isometry) modifier adds +50% separate markup to price
-    if (isometry && sprite.categoryId !== '7' && sprite.categoryId !== '2') {
-      animatedSinglePrice = Math.round(animatedSinglePrice * 1.50);
-    }
-
-    // Dynamic size limit surcharge (if resolution exceeds maximum base size of category):
-    let sizeSurplusModifier = 1.0;
-    if (sprite.categoryId !== '7' && cat.maxBaseSize) {
-      const maxDim = Math.max(sprite.width, sprite.height);
-      const excess = Math.max(0, maxDim - cat.maxBaseSize);
-      if (excess > 0) {
-        let extraPercent = 0;
-        if (excess === 1) {
-          extraPercent = 0.5;
-        } else if (excess <= 100) {
-          extraPercent = 0.5 + (excess - 1) * ((40 - 0.5) / 99);
-        } else {
-          extraPercent = Math.min(50, 40 + (excess - 100) * 0.4);
-        }
-        sizeSurplusModifier = 1.0 + (extraPercent / 100);
-      }
-    }
-
-    if (sizeSurplusModifier > 1.0) {
-      animatedSinglePrice = Math.round(animatedSinglePrice * sizeSurplusModifier);
-    }
-
-    // Variant calculation (50% value of full animated cost)
-    const singleVarPrice = Math.round(animatedSinglePrice * 0.5);
-    const blockOrigTotal = animatedSinglePrice * sprite.countOrig;
-    const blockVarTotal = singleVarPrice * sprite.countVar;
-    const totalBlockPrice = isInvalidSize ? 0 : (blockOrigTotal + blockVarTotal);
-
     return {
       totalPrice: totalBlockPrice,
+      priceRange,
+      singlePriceRange,
+      singleVarPriceRange,
+      blockOrigRange,
+      blockVarRange,
+      sizeTier,
+      scaleMultiplier,
+      compTierKey,
+      animTierKey,
       isInvalidSize,
-      baseCalculatedPrice,
-      baseDiscountPercent,
+      baseCalculatedPrice: Math.round((sizeTier.price.low + sizeTier.price.high) / 2 * scaleMultiplier),
+      baseDiscountPercent: 0,
       animatedSinglePrice,
       singleVarPrice,
-      blockOrigTotal,
-      blockVarTotal,
+      blockOrigTotal: Math.round((blockOrigLow + blockOrigHigh) / 2),
+      blockVarTotal: Math.round((blockVarLow + blockVarHigh) / 2),
       sizeInfo,
       sizeFactor,
       maxBaseSize: cat.maxBaseSize,
-      sizeSurplusModifier,
+      sizeSurplusModifier: scaleMultiplier,
       frames,
       animModeLogText,
       categoryName: lang === 'ru' ? cat.nameRu : cat.nameEn,
@@ -1825,9 +2087,9 @@ export default function App() {
       animPoints: framePoints,
       framePoints,
       isoPoints,
-      surchargePercentPercent: Math.round((complexityMultiplier - 1) * 100),
+      surchargePercentPercent: Math.round(((compMultiplier.low + compMultiplier.high) / 2 - 1) * 100),
       generalComplexity: totalComplexity,
-      dimensionalComplexity: 0, // Canvas size no longer adds PTS
+      dimensionalComplexity: 0,
       totalComplexity,
       baseGeneralComplexity: totalComplexity,
       baseTotalComplexity: totalComplexity,
@@ -1843,56 +2105,73 @@ export default function App() {
       isometry,
       quality: sprite.quality || 'optimal',
       qualitySurchargePercent: 0,
-      canvasScale,
+      canvasScale: scaleMultiplier,
       staticCap,
-      rawStaticPoints,
+      rawStaticPoints: detailPointsRaw + designPointsRaw + stylePointsRaw + isoPointsRaw,
       cappedStaticPoints,
-      designPoints
+      designPoints,
+      isManualPrice,
+      manualPrice: sprite.manualPrice,
+      priceMode: sprite.priceMode || 'auto',
+      autoSinglePriceRange: { low: autoSingleLow, high: autoSingleHigh }
     };
   };
 
   // Memoized global calculations
   const orderCalculations = useMemo(() => {
-    let rawTotal = 0;
+    let rawTotalLow = 0;
+    let rawTotalHigh = 0;
     let cumulativeSprites = 0;
-    let surchargeAmount = 0;
-    let totalRawDiscount = 0;
+
+    let surchargeAmountLow = 0;
+    let surchargeAmountHigh = 0;
+
+    let totalRawDiscountLow = 0;
+    let totalRawDiscountHigh = 0;
+
     const itemsLogs: string[] = [];
     const rawItems: any[] = [];
 
+    const activeCalculationSprites = calcMode === 'template' ? templateSprites : sprites;
     const actualSpeedRate = noDeadline ? 1.0 : speedRate;
+    const totalSpritesCount = activeCalculationSprites.reduce((sum, s) => sum + s.countOrig + s.countVar, 0);
 
-    const totalSpritesCount = sprites.reduce((sum, s) => sum + s.countOrig + s.countVar, 0);
-    const isLargeSpecification = totalSpritesCount > 100;
-
-    sprites.forEach((s, idx) => {
+    activeCalculationSprites.forEach((s, idx) => {
       const res = calculateSpritePrice(s);
-      rawTotal += res.totalPrice;
+      rawTotalLow += res.priceRange.low;
+      rawTotalHigh += res.priceRange.high;
 
-      // Track surcharge and progressive discounts specifically for this sprite item based on running count
-      let itemSurcharge = 0;
-      let surchargeBreakdownOrig = 0;
-      let surchargeBreakdownVar = 0;
+      // Item-level progressive wholesale discounts and over-100 surcharges
+      let surchargeBreakdownOrigLow = 0;
+      let surchargeBreakdownOrigHigh = 0;
+      let surchargeBreakdownVarLow = 0;
+      let surchargeBreakdownVarHigh = 0;
 
-      let itemOrigDiscount = 0;
-      let itemVarDiscount = 0;
+      let itemOrigDiscountLow = 0;
+      let itemOrigDiscountHigh = 0;
+      let itemVarDiscountLow = 0;
+      let itemVarDiscountHigh = 0;
 
       // Originals
       for (let i = 0; i < s.countOrig; i++) {
         cumulativeSprites++;
+        // Bug 3 fix: Monotonic threshold!
+        // Surcharge (+100% of single price) applies ONLY to sprites beyond 100.
+        // Wholesale discounts on sprites 11-100 are preserved!
         if (cumulativeSprites > 100) {
-          surchargeBreakdownOrig += Math.round(res.animatedSinglePrice * actualSpeedRate * 1);
+          surchargeBreakdownOrigLow += Math.round(res.singlePriceRange.low * actualSpeedRate * 1.0);
+          surchargeBreakdownOrigHigh += Math.round(res.singlePriceRange.high * actualSpeedRate * 1.0);
         }
-        if (!isLargeSpecification) {
-          let discountPercent = 0;
-          if (cumulativeSprites > 50) {
-            discountPercent = 50;
-          } else if (cumulativeSprites > 10) {
-            discountPercent = 25;
-          }
-          if (discountPercent > 0) {
-            itemOrigDiscount += res.animatedSinglePrice * (discountPercent / 100);
-          }
+        
+        let discountPercent = 0;
+        if (cumulativeSprites > 50 && cumulativeSprites <= 100) {
+          discountPercent = 50;
+        } else if (cumulativeSprites > 10 && cumulativeSprites <= 50) {
+          discountPercent = 25;
+        }
+        if (discountPercent > 0) {
+          itemOrigDiscountLow += res.singlePriceRange.low * (discountPercent / 100);
+          itemOrigDiscountHigh += res.singlePriceRange.high * (discountPercent / 100);
         }
       }
 
@@ -1900,196 +2179,217 @@ export default function App() {
       for (let i = 0; i < s.countVar; i++) {
         cumulativeSprites++;
         if (cumulativeSprites > 100) {
-          surchargeBreakdownVar += Math.round(res.singleVarPrice * actualSpeedRate * 1);
+          surchargeBreakdownVarLow += Math.round(res.singleVarPriceRange.low * actualSpeedRate * 1.0);
+          surchargeBreakdownVarHigh += Math.round(res.singleVarPriceRange.high * actualSpeedRate * 1.0);
         }
-        if (!isLargeSpecification) {
-          let discountPercent = 0;
-          if (cumulativeSprites > 50) {
-            discountPercent = 50;
-          } else if (cumulativeSprites > 10) {
-            discountPercent = 25;
-          }
-          if (discountPercent > 0) {
-            itemVarDiscount += res.singleVarPrice * (discountPercent / 100);
-          }
+        
+        let discountPercent = 0;
+        if (cumulativeSprites > 50 && cumulativeSprites <= 100) {
+          discountPercent = 50;
+        } else if (cumulativeSprites > 10 && cumulativeSprites <= 50) {
+          discountPercent = 25;
+        }
+        if (discountPercent > 0) {
+          itemVarDiscountLow += res.singleVarPriceRange.low * (discountPercent / 100);
+          itemVarDiscountHigh += res.singleVarPriceRange.high * (discountPercent / 100);
         }
       }
 
-      itemSurcharge = surchargeBreakdownOrig + surchargeBreakdownVar;
-      surchargeAmount += itemSurcharge;
+      const itemSurchargeLow = surchargeBreakdownOrigLow + surchargeBreakdownVarLow;
+      const itemSurchargeHigh = surchargeBreakdownOrigHigh + surchargeBreakdownVarHigh;
+      surchargeAmountLow += itemSurchargeLow;
+      surchargeAmountHigh += itemSurchargeHigh;
 
-      const itemDiscountAmount = itemOrigDiscount + itemVarDiscount;
-      totalRawDiscount += itemDiscountAmount;
+      const itemDiscountLow = itemOrigDiscountLow + itemVarDiscountLow;
+      const itemDiscountHigh = itemOrigDiscountHigh + itemVarDiscountHigh;
+      totalRawDiscountLow += itemDiscountLow;
+      totalRawDiscountHigh += itemDiscountHigh;
 
-      const itemPriceBeforeDiscount = Math.round(res.totalPrice * actualSpeedRate);
-      const itemBulkDiscountAmount = Math.round(itemDiscountAmount * actualSpeedRate);
-      const itemSubtotalPrice = itemPriceBeforeDiscount - itemBulkDiscountAmount + itemSurcharge;
-      
-      const itemLoadMarkupAmount = CURRENT_LOAD_STATUS === 1 
-        ? Math.round(itemSubtotalPrice * 0.20) 
-        : CURRENT_LOAD_STATUS === 2 
-        ? Math.round(itemSubtotalPrice * 0.35) 
-        : 0;
-        
-      const itemNoDeadlineDiscountAmount = (noDeadline && CURRENT_LOAD_STATUS !== 2) 
-        ? Math.round((itemSubtotalPrice + itemLoadMarkupAmount) * 0.25) 
-        : 0;
-        
-      const itemFinalPrice = Math.max(0, itemSubtotalPrice + itemLoadMarkupAmount - itemNoDeadlineDiscountAmount);
+      const itemPriceBeforeDiscountLow = Math.round(res.priceRange.low * actualSpeedRate);
+      const itemPriceBeforeDiscountHigh = Math.round(res.priceRange.high * actualSpeedRate);
+
+      const itemBulkDiscountLow = Math.round(itemDiscountLow * actualSpeedRate);
+      const itemBulkDiscountHigh = Math.round(itemDiscountHigh * actualSpeedRate);
+
+      const itemSubtotalLow = Math.max(0, itemPriceBeforeDiscountLow - itemBulkDiscountHigh + itemSurchargeLow);
+      const itemSubtotalHigh = Math.max(itemSubtotalLow, itemPriceBeforeDiscountHigh - itemBulkDiscountLow + itemSurchargeHigh);
+
+      // Bug 4 fix: Load markup and No-Deadline discount do not cancel each other out!
+      // Both are calculated cleanly from subtotal.
+      const loadMarkupRate = CURRENT_LOAD_STATUS === 1 ? 0.20 : CURRENT_LOAD_STATUS === 2 ? 0.35 : 0;
+      const itemLoadMarkupLow = Math.round(itemSubtotalLow * loadMarkupRate);
+      const itemLoadMarkupHigh = Math.round(itemSubtotalHigh * loadMarkupRate);
+
+      const noDeadlineDiscountRate = (noDeadline && CURRENT_LOAD_STATUS !== 2) ? 0.25 : 0;
+      const itemNoDeadlineDiscountLow = Math.round(itemSubtotalLow * noDeadlineDiscountRate);
+      const itemNoDeadlineDiscountHigh = Math.round(itemSubtotalHigh * noDeadlineDiscountRate);
+
+      const itemFinalLow = Math.max(0, itemSubtotalLow + itemLoadMarkupLow - itemNoDeadlineDiscountHigh);
+      const itemFinalHigh = Math.max(itemFinalLow, itemSubtotalHigh + itemLoadMarkupHigh - itemNoDeadlineDiscountLow);
+      const finalPriceRange: PriceRange = { low: itemFinalLow, high: itemFinalHigh };
 
       rawItems.push({
         index: idx + 1,
         ...res,
-        itemPriceBeforeDiscount,
-        itemBulkDiscountAmount,
-        itemSubtotalPrice,
-        itemSurcharge,
-        itemLoadMarkupAmount,
-        itemNoDeadlineDiscountAmount,
-        itemFinalPrice
+        finalPriceRange,
+        itemPriceBeforeDiscountRange: { low: itemPriceBeforeDiscountLow, high: itemPriceBeforeDiscountHigh },
+        itemBulkDiscountRange: { low: itemBulkDiscountLow, high: itemBulkDiscountHigh },
+        itemSurchargeRange: { low: itemSurchargeLow, high: itemSurchargeHigh },
+        itemPriceBeforeDiscount: Math.round((itemPriceBeforeDiscountLow + itemPriceBeforeDiscountHigh) / 2),
+        itemBulkDiscountAmount: Math.round((itemBulkDiscountLow + itemBulkDiscountHigh) / 2),
+        itemSubtotalPrice: Math.round((itemSubtotalLow + itemSubtotalHigh) / 2),
+        itemSurcharge: Math.round((itemSurchargeLow + itemSurchargeHigh) / 2),
+        itemLoadMarkupAmount: Math.round((itemLoadMarkupLow + itemLoadMarkupHigh) / 2),
+        itemNoDeadlineDiscountAmount: Math.round((itemNoDeadlineDiscountLow + itemNoDeadlineDiscountHigh) / 2),
+        itemFinalPrice: Math.round((itemFinalLow + itemFinalHigh) / 2)
       });
 
-      // Assemble detailed formula log
-      let itemLog = `${idx + 1}. [${res.categoryName}] (Size: ${res.sizeInfo})\n`;
-      const baseCategoryPrice = CATEGORIES_LIST.find(c => c.id === s.categoryId)?.basePrice || 0;
-      itemLog += `   • Base Category Rate: ${formatPrice(baseCategoryPrice)}\n`;
+      // Assemble detailed formula log with ranges and tier details
+      let itemLog = `${idx + 1}. [${res.categoryName}] (${res.sizeInfo})\n`;
+      itemLog += `   • Size Tier: ${res.sizeTier.name} (${res.sizeTier.maxDim}px max) → ${formatPrice(res.sizeTier.price)}`;
+      if (res.scaleMultiplier > 1.0) {
+        itemLog += ` × ${res.scaleMultiplier.toFixed(2)} (XL scale)`;
+      }
+      itemLog += `\n`;
 
-      if (s.categoryId === '7') {
-        const isHD = s.skinType === '2';
-        const minSizeForLog = 64;
-        const sizePx = isHD ? 128 : 64;
-        itemLog += `   • Canvas Multiplier: ((${sizePx} × ${sizePx}) / (${minSizeForLog}²))^0.35 ${isHD ? '× 1.15 (HD +15%)' : ''} = ${(res.canvasScale || 1).toFixed(3)}\n`;
-        itemLog += `   • Base Canvas Price: Math.max(${formatPrice(baseCategoryPrice)} × ${(res.canvasScale || 1).toFixed(3)}, 150 ₽) = ${formatPrice(res.baseCalculatedPrice)}\n`;
-      } else {
-        const itemCatForLog = CATEGORIES_LIST.find(c => c.id === s.categoryId);
-        const minSizeForLog = itemCatForLog ? itemCatForLog.minBaseSize : 16;
-        itemLog += `   • Canvas Multiplier: ((${s.width} × ${s.height}) / (${minSizeForLog}²))^0.35 = ${(res.canvasScale || 1).toFixed(3)}\n`;
-        itemLog += `   • Base Canvas Price: Math.max(${formatPrice(baseCategoryPrice)} × ${(res.canvasScale || 1).toFixed(3)}, 150 ₽) = ${formatPrice(res.baseCalculatedPrice)}\n`;
-      }
-      
-      itemLog += `   • Complexity Points (PTS): ${res.totalComplexity} pts\n`;
-      itemLog += `     - Quality Level: ${res.detailLevel === 'detailed' ? 'High' : res.detailLevel === 'moderate' ? 'Medium' : 'Low'} (+${res.detailPoints} pts)\n`;
-      if (s.hasAnimation && res.framePoints > 0) {
-        itemLog += `     - Animation (${res.frames} frames × ${s.animComplexity || 'simple'}): +${res.framePoints} pts\n`;
-      }
-      if (s.designMode === 'scratch') itemLog += `     - Design from scratch: +10 pts\n`;
-      if (s.styleMode === 'specific') itemLog += `     - Specific style (+30% complexity): +${res.stylePoints} pts\n`;
-      if (s.isometry && res.isoPoints > 0) itemLog += `     - Perspective (3D/Isometry +50% complexity): +${res.isoPoints} pts\n`;
-      
-      let mult: number;
-      if (res.totalComplexity <= 100) {
-        const ptsRateItem = 0.015 + (res.totalComplexity * 0.00025);
-        mult = 1 + res.totalComplexity * ptsRateItem;
-        itemLog += `   • Complexity Multiplier: 1 + (${res.totalComplexity} * ${ptsRateItem.toFixed(4)}) = x${mult.toFixed(3)}\n`;
-      } else {
-        const excessPts = res.totalComplexity - 100;
-        mult = 5.0 + excessPts * 0.625;
-        itemLog += `   • Complexity Multiplier (Exceeds 100 PTS limit: +62.5%/pt above 100): 5.0 + (${excessPts} * 0.625) = x${mult.toFixed(3)}\n`;
-      }
-      
-      let currentSubtotal = Math.round(res.baseCalculatedPrice * mult);
-      itemLog += `   • Price with Complexity: ${formatPrice(res.baseCalculatedPrice)} × ${mult.toFixed(3)} = ${formatPrice(currentSubtotal)}\n`;
-        
+      itemLog += `   • Complexity Tier: ${res.compTierKey.toUpperCase()} (×${COMPLEXITY_MULTIPLIER[res.compTierKey].low} – ×${COMPLEXITY_MULTIPLIER[res.compTierKey].high})\n`;
+
       if (s.isometry) {
-        itemLog += `   • Perspective (Isometry): +50% separate markup = x1.50\n`;
-        currentSubtotal = Math.round(currentSubtotal * 1.5);
-        itemLog += `     - Price with Perspective: ${formatPrice(currentSubtotal)}\n`;
+        itemLog += `   • Perspective (Isometry): ×1.30 – ×1.50 (clean tier markup)\n`;
+      }
+      if (s.designMode === 'scratch') {
+        itemLog += `   • Design from scratch: ×1.10 – ×1.20\n`;
+      }
+      if (s.styleMode === 'specific') {
+        itemLog += `   • Specific style: ×1.10 – ×1.25 (${s.styleName || 'Custom'})\n`;
       }
 
-      if (res.sizeSurplusModifier > 1.0) {
-          const surplusPct = ((res.sizeSurplusModifier - 1.0) * 100).toFixed(1).replace('.0', '');
-          itemLog += `   • Size limit surcharge: +${surplusPct}% (resolution exceeds max size ${res.maxBaseSize}px)\n`;
-        }
-        
-        itemLog += `   • Final Single Sprite Price: ${formatPrice(res.animatedSinglePrice)}\n`;
+      if (res.animTierKey !== 'none') {
+        itemLog += `   • Animation Tier: ${res.animTierKey.toUpperCase()} (${res.frames} frames) → +${formatPrice(ANIMATION_FLAT[res.animTierKey])}\n`;
+      }
 
+      if (res.isManualPrice) {
+        itemLog += `   • ${lang === 'ru' ? 'Режим расчёта: РУЧНОЙ (точная цена)' : 'Pricing Mode: MANUAL (exact price)'}\n`;
+        itemLog += `   • ${lang === 'ru' ? 'Фиксированная цена за 1 оригинал' : 'Fixed price per 1 original'}: ${formatPrice(res.singlePriceRange)}\n`;
+      } else {
+        itemLog += `   • Position Base Range: ${formatPrice(res.singlePriceRange)} per original\n`;
+      }
       if (s.countVar > 0) {
-        itemLog += `   • Price per variant (50%): ${formatPrice(res.singleVarPrice)}\n`;
+        itemLog += `   • Position Variation Range (50%): ${formatPrice(res.singleVarPriceRange)} per variant\n`;
       }
-      
-      itemLog += `   • Subtotal (base): (${formatPrice(res.animatedSinglePrice)} × ${s.countOrig} original) + (${formatPrice(res.singleVarPrice)} × ${s.countVar} variants) = ${formatPrice(res.totalPrice)}\n`;
-      
-      if (itemDiscountAmount > 0) {
+
+      if (itemDiscountHigh > 0) {
         if (lang === 'ru') {
-          itemLog += `   • Оптовая скидка для этой позиции (с учётом лимитов >10 и >50 ассетов): -${formatPrice(Math.round(itemDiscountAmount * actualSpeedRate))}\n`;
+          itemLog += `   • Оптовая скидка для этой позиции: -${formatPrice({ low: itemBulkDiscountLow, high: itemBulkDiscountHigh })}\n`;
         } else {
-          itemLog += `   • Progressive wholesale discount for this item (with limits >10 and >50 assets): -${formatPrice(Math.round(itemDiscountAmount * actualSpeedRate))}\n`;
+          itemLog += `   • Volume discount for this item: -${formatPrice({ low: itemBulkDiscountLow, high: itemBulkDiscountHigh })}\n`;
         }
       }
 
-      if (itemSurcharge > 0) {
+      // Bug 2 fix: Log text explicitly states "+100%" instead of "+1000%"
+      if (itemSurchargeHigh > 0) {
         if (lang === 'ru') {
-          itemLog += `   • НАЦЕНКА (+1000% превышение 100 спрайтов): +${formatPrice(itemSurcharge)}\n`;
+          itemLog += `   • НАЦЕНКА (+100% за спрайты сверх лимита в 100 шт.): +${formatPrice({ low: itemSurchargeLow, high: itemSurchargeHigh })}\n`;
         } else {
-          itemLog += `   • SURCHARGE (+1000% limit of 100 sprites exceeded): +${formatPrice(itemSurcharge)}\n`;
+          itemLog += `   • SURCHARGE (+100% for sprites beyond the 100 limit): +${formatPrice({ low: itemSurchargeLow, high: itemSurchargeHigh })}\n`;
         }
       }
 
+      itemLog += `   • Итог по позиции: ${formatPrice(finalPriceRange)}\n`;
       itemsLogs.push(itemLog);
     });
 
-    const baseTotalRounded = Math.round(rawTotal);
+    const baseTotalRounded = Math.round((rawTotalLow + rawTotalHigh) / 2);
     const priceBeforeDiscount = Math.round(baseTotalRounded * actualSpeedRate);
 
-    const bulkDiscountAmount = Math.round(totalRawDiscount * actualSpeedRate);
+    const bulkDiscountAmount = Math.round(((totalRawDiscountLow + totalRawDiscountHigh) / 2) * actualSpeedRate);
+    const bulkDiscountRange: PriceRange = {
+      low: Math.round(totalRawDiscountLow * actualSpeedRate),
+      high: Math.round(totalRawDiscountHigh * actualSpeedRate)
+    };
     const hasBulkDiscount = bulkDiscountAmount > 0;
-    
-    // Subtotal before load surcharges or "no deadline" discounts
-    const subtotalPrice = priceBeforeDiscount - bulkDiscountAmount + surchargeAmount;
-    
-    // Load markup: +20% if CURRENT_LOAD_STATUS === 1 (Medium), +35% if CURRENT_LOAD_STATUS === 2 (Full)
-    const loadMarkupAmount = CURRENT_LOAD_STATUS === 1 
-      ? Math.round(subtotalPrice * 0.20) 
-      : CURRENT_LOAD_STATUS === 2 
-      ? Math.round(subtotalPrice * 0.35) 
-      : 0;
-    
-    // "No deadline" discount: -25% if noDeadline is ON, and load status is NOT 2 (Full)
-    const noDeadlineDiscountAmount = (noDeadline && CURRENT_LOAD_STATUS !== 2) 
-      ? Math.round((subtotalPrice + loadMarkupAmount) * 0.25) 
-      : 0;
 
-    const finalPriceRub = Math.max(0, subtotalPrice + loadMarkupAmount - noDeadlineDiscountAmount);
-    
-    // The true base price of the order WITHOUT the wholesale discount (including load markup and no-deadline option if active)
-    const rawPriceBeforeDiscountTotal = priceBeforeDiscount + surchargeAmount;
-    const loadMarkupBeforeDiscount = CURRENT_LOAD_STATUS === 1 
-      ? Math.round(rawPriceBeforeDiscountTotal * 0.20) 
-      : CURRENT_LOAD_STATUS === 2 
-      ? Math.round(rawPriceBeforeDiscountTotal * 0.35) 
-      : 0;
-    const noDeadlineDiscountBeforeDiscount = (noDeadline && CURRENT_LOAD_STATUS !== 2) 
-      ? Math.round((rawPriceBeforeDiscountTotal + loadMarkupBeforeDiscount) * 0.25) 
-      : 0;
-    const priceBeforeDiscountTotal = rawPriceBeforeDiscountTotal + loadMarkupBeforeDiscount - noDeadlineDiscountBeforeDiscount;
+    const surchargeAmount = Math.round((surchargeAmountLow + surchargeAmountHigh) / 2);
+    const surchargeRange: PriceRange = { low: surchargeAmountLow, high: surchargeAmountHigh };
 
-    // Prepayment percentage calculated according to the progressive scale
-    const prepayPercent = calculatePrepaymentPercent(50, finalPriceRub);
+    const subtotalLow = Math.max(0, Math.round(rawTotalLow * actualSpeedRate) - bulkDiscountRange.high + surchargeAmountLow);
+    const subtotalHigh = Math.max(subtotalLow, Math.round(rawTotalHigh * actualSpeedRate) - bulkDiscountRange.low + surchargeAmountHigh);
+    const subtotalPrice = Math.round((subtotalLow + subtotalHigh) / 2);
 
-    const prepayAmountRub = Math.round(finalPriceRub * (prepayPercent / 100));
+    const loadRate = CURRENT_LOAD_STATUS === 1 ? 0.20 : CURRENT_LOAD_STATUS === 2 ? 0.35 : 0;
+    const loadMarkupLow = Math.round(subtotalLow * loadRate);
+    const loadMarkupHigh = Math.round(subtotalHigh * loadRate);
+    const loadMarkupAmount = Math.round((loadMarkupLow + loadMarkupHigh) / 2);
+    const loadMarkupRange: PriceRange = { low: loadMarkupLow, high: loadMarkupHigh };
+
+    const noDeadlineRate = (noDeadline && CURRENT_LOAD_STATUS !== 2) ? 0.25 : 0;
+    const noDeadlineDiscountLow = Math.round(subtotalLow * noDeadlineRate);
+    const noDeadlineDiscountHigh = Math.round(subtotalHigh * noDeadlineRate);
+    const noDeadlineDiscountAmount = Math.round((noDeadlineDiscountLow + noDeadlineDiscountHigh) / 2);
+    const noDeadlineDiscountRange: PriceRange = { low: noDeadlineDiscountLow, high: noDeadlineDiscountHigh };
+
+    const finalPriceLow = Math.max(0, subtotalLow + loadMarkupLow - noDeadlineDiscountHigh);
+    const finalPriceHigh = Math.max(finalPriceLow, subtotalHigh + loadMarkupHigh - noDeadlineDiscountLow);
+    const finalPriceRange: PriceRange = { low: finalPriceLow, high: finalPriceHigh };
+    const finalPriceRub = Math.round((finalPriceLow + finalPriceHigh) / 2);
+
+    // Prepayment calculated directly from minimum price as a non-approximate, exact amount
+    const prepayPercent = calculatePrepaymentPercent(50, finalPriceLow);
+    const prepayAmountRub = Math.round(finalPriceLow * (prepayPercent / 100));
+    const prepayRange: PriceRange = { low: prepayAmountRub, high: prepayAmountRub };
+
+    // Accurately calculate full price before any discounts (without bulk discount and without no-deadline discount)
+    const subtotalBeforeDiscountsLow = Math.round(rawTotalLow * actualSpeedRate) + surchargeAmountLow;
+    const subtotalBeforeDiscountsHigh = Math.round(rawTotalHigh * actualSpeedRate) + surchargeAmountHigh;
+    const loadMarkupBeforeDiscountsLow = Math.round(subtotalBeforeDiscountsLow * loadRate);
+    const loadMarkupBeforeDiscountsHigh = Math.round(subtotalBeforeDiscountsHigh * loadRate);
+
+    const priceBeforeDiscountTotalRange: PriceRange = {
+      low: subtotalBeforeDiscountsLow + loadMarkupBeforeDiscountsLow,
+      high: subtotalBeforeDiscountsHigh + loadMarkupBeforeDiscountsHigh
+    };
+    const priceBeforeDiscountTotal = Math.round((priceBeforeDiscountTotalRange.low + priceBeforeDiscountTotalRange.high) / 2);
+
+    const hasDiscount = (bulkDiscountAmount > 0) || (noDeadlineDiscountAmount > 0);
+    const totalDiscountLow = Math.max(0, priceBeforeDiscountTotalRange.low - finalPriceLow);
+    const totalDiscountHigh = Math.max(0, priceBeforeDiscountTotalRange.high - finalPriceHigh);
+    const totalDiscountRange: PriceRange = { low: totalDiscountLow, high: totalDiscountHigh };
+    const totalDiscountAmount = Math.round((totalDiscountLow + totalDiscountHigh) / 2);
 
     const isImpossible = rawItems.some(item => item.isImpossible);
 
     return {
       finalPriceRub,
+      finalPriceRange,
       prepayAmountRub,
+      prepayRange,
       prepayPercent,
       itemsLogs,
       rawItems,
       baseTotalRounded,
+      baseTotalRange: { low: rawTotalLow, high: rawTotalHigh },
       hasBulkDiscount,
       bulkDiscountAmount,
+      bulkDiscountRange,
+      hasDiscount,
+      totalDiscountAmount,
+      totalDiscountRange,
+      surchargeAmount,
+      surchargeRange,
+      loadMarkupAmount,
+      loadMarkupRange,
+      noDeadlineDiscountAmount,
+      noDeadlineDiscountRange,
       priceBeforeDiscount,
       priceBeforeDiscountTotal,
+      priceBeforeDiscountTotalRange,
       totalSpritesCount,
-      surchargeAmount,
       actualSpeedRate,
-      loadMarkupAmount,
-      noDeadlineDiscountAmount,
       subtotalPrice,
+      subtotalRange: { low: subtotalLow, high: subtotalHigh },
       isImpossible
     };
-  }, [sprites, speedRate, noDeadline, lang, currency, usdRate]);
+  }, [sprites, calcMode, templateSprites, speedRate, noDeadline, lang, currency, usdRate]);
 
   // Handle preset templates in dropdown
   const applyPresetSize = (id: number, val: string) => {
@@ -2494,9 +2794,10 @@ export default function App() {
 
   // Generate Technical Specification
   const generateTZ = (autoScroll: boolean = false, isExplicit: boolean = false) => {
+    const activeTzSprites = calcMode === 'template' ? templateSprites : sprites;
     // Check descriptions
     let hasErrors = false;
-    sprites.forEach(s => {
+    activeTzSprites.forEach(s => {
       if (!s.description.trim()) {
         hasErrors = true;
       }
@@ -2522,7 +2823,7 @@ export default function App() {
       return;
     }
 
-    let hasSizeErrors = sprites.some(s => s.categoryId !== '7' && (s.width > 1000 || s.height > 1000));
+    let hasSizeErrors = activeTzSprites.some(s => s.categoryId !== '7' && (s.width > 1000 || s.height > 1000));
     if (hasSizeErrors) {
       if (autoScroll) {
         triggerToast(
@@ -2549,13 +2850,37 @@ export default function App() {
       : `Queue Load: ${speedRate === 1.35 ? 'High (+35%)' : speedRate === 1.20 ? 'Medium (+20%)' : 'Standard'}\n\n`;
     
     tzText += isRu ? `[ ИТОГОВЫЙ БЮДЖЕТ И ПРЕДОПЛАТА ]\n` : `[ FINAL BUDGET & PREPAYMENT ]\n`;
-    tzText += isRu ? `• Итоговая стоимость: ${formatPrice(orderCalculations.finalPriceRub)}\n` : `• Total Cost: ${formatPrice(orderCalculations.finalPriceRub)}\n`;
-    tzText += isRu ? `• Предоплата (${orderCalculations.prepayPercent}%): ${formatPrice(orderCalculations.prepayAmountRub)}\n` : `• Prepayment Amount (${orderCalculations.prepayPercent}%): ${formatPrice(orderCalculations.prepayAmountRub)}\n`;
-    tzText += isRu ? `• Всего позиций в заказе: ${orderCalculations.totalSpritesCount} шт.\n` : `• Total Items in Order: ${orderCalculations.totalSpritesCount} pcs.\n`;
-    if (orderCalculations.bulkDiscountAmount > 0) {
-      tzText += isRu ? `• Оптовая скидка: -${formatPrice(orderCalculations.bulkDiscountAmount)}\n` : `• Volume Discount: -${formatPrice(orderCalculations.bulkDiscountAmount)}\n`;
+    if (orderCalculations.finalPriceRange.low !== orderCalculations.finalPriceRange.high) {
+      tzText += isRu 
+        ? `• Предположительная цена: от ${formatPrice(orderCalculations.finalPriceRange.low)} до ${formatPrice(orderCalculations.finalPriceRange.high)}\n`
+        : `• Estimated Price: from ${formatPrice(orderCalculations.finalPriceRange.low)} to ${formatPrice(orderCalculations.finalPriceRange.high)}\n`;
+    } else {
+      tzText += isRu 
+        ? `• Предположительная цена: ${formatPrice(orderCalculations.finalPriceRub)}\n`
+        : `• Estimated Price: ${formatPrice(orderCalculations.finalPriceRub)}\n`;
     }
-    tzText += `\n`;
+    if (orderCalculations.hasDiscount) {
+      if (orderCalculations.priceBeforeDiscountTotalRange.low !== orderCalculations.priceBeforeDiscountTotalRange.high) {
+        tzText += isRu
+          ? `• Стоимость до скидки: от ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.low)} до ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.high)}\n`
+          : `• Price before discount: from ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.low)} to ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.high)}\n`;
+      } else {
+        tzText += isRu
+          ? `• Стоимость до скидки: ${formatPrice(orderCalculations.priceBeforeDiscountTotal)}\n`
+          : `• Price before discount: ${formatPrice(orderCalculations.priceBeforeDiscountTotal)}\n`;
+      }
+      if (orderCalculations.bulkDiscountAmount > 0) {
+        tzText += isRu ? `• Оптовая скидка: -${formatPrice(orderCalculations.bulkDiscountRange || orderCalculations.bulkDiscountAmount)}\n` : `• Volume Discount: -${formatPrice(orderCalculations.bulkDiscountRange || orderCalculations.bulkDiscountAmount)}\n`;
+      }
+      if (noDeadline) {
+        tzText += isRu ? `• Скидка «Без дедлайна» (-25%): -${formatPrice(orderCalculations.noDeadlineDiscountRange || orderCalculations.noDeadlineDiscountAmount)}\n` : `• "No Deadline" discount (-25%): -${formatPrice(orderCalculations.noDeadlineDiscountRange || orderCalculations.noDeadlineDiscountAmount)}\n`;
+      }
+    }
+    tzText += isRu 
+      ? `• Предоплата (${orderCalculations.prepayPercent}%, от мин. суммы): ${formatPrice(orderCalculations.prepayAmountRub)}\n` 
+      : `• Prepayment (${orderCalculations.prepayPercent}%, from min. price): ${formatPrice(orderCalculations.prepayAmountRub)}\n`;
+    tzText += isRu ? `• Всего позиций в заказе: ${orderCalculations.totalSpritesCount} шт.\n` : `• Total Items in Order: ${orderCalculations.totalSpritesCount} pcs.\n`;
+    tzText += isRu ? `• Примечание: Финальная стоимость фиксируется после детального согласования ТЗ\n\n` : `• Note: Final price is fixed after detailed agreement on the task specification\n\n`;
 
     tzText += isRu ? `[ СОСТАВ ЗАКАЗА И ПАРАМЕТРЫ ]\n\n` : `[ ORDER CONTENTS & SPECIFICATIONS ]\n\n`;
 
@@ -2569,7 +2894,7 @@ export default function App() {
         : (isRu ? 'Свободный стиль' : 'Free Style');
 
       const projectionLabel = item.isometry
-        ? (isRu ? 'Объёмная перспектива (+50% к сложности)' : 'Volumetric Perspective (+50% multiplier)')
+        ? (isRu ? 'Объёмная перспектива (Изометрия)' : 'Volumetric Perspective (Isometry)')
         : (isRu ? '2D Перспектива' : '2D Perspective');
 
       const detailLabel = item.detailLevel === 'detailed' 
@@ -2585,10 +2910,19 @@ export default function App() {
       tzText += `  • ${isRu ? 'Стилистика' : 'Style'}: ${styleLabel}\n`;
       tzText += `  • ${isRu ? 'Проекция' : 'Projection'}: ${projectionLabel}\n`;
       tzText += `  • ${isRu ? 'Детализация' : 'Detail Level'}: ${detailLabel}\n`;
-      tzText += `  • ${isRu ? 'Сложность' : 'Complexity'}: ${item.complexityCategory} (${item.totalComplexity} pts, ×${item.totalComplexityMultiplier})\n`;
+      tzText += `  • ${isRu ? 'Сложность' : 'Complexity'}: ${item.complexityCategory} (${item.totalComplexity} pts)\n`;
       tzText += `  • ${isRu ? 'Анимация' : 'Animation'}: ${item.hasAnimation ? `${item.frames} ${isRu ? 'кадр(ов)' : 'frame(s)'} (${item.animComplexity})` : (isRu ? 'Статичный спрайт' : 'Static sprite')}\n`;
       tzText += `  • ${isRu ? 'Количество' : 'Quantity'}: ${item.countOrig} ${isRu ? 'ориг.' : 'orig.'}${item.countVar > 0 ? `, ${item.countVar} ${isRu ? 'вар.' : 'vars'}` : ''}\n`;
-      tzText += `  • ${isRu ? 'Стоимость позиции' : 'Item Cost'}: ${formatPrice(item.itemFinalPrice)}\n\n`;
+      if (item.isManualPrice) {
+        tzText += `  • ${isRu ? 'Режим цены' : 'Pricing Mode'}: ${isRu ? `Ручной (точная цена: ${formatPrice(item.singlePriceRange)} за 1 ориг.)` : `Manual (exact price: ${formatPrice(item.singlePriceRange)} per 1 orig.)`}\n`;
+      }
+      if (item.finalPriceRange && item.finalPriceRange.low !== item.finalPriceRange.high) {
+        tzText += isRu
+          ? `  • Предположительная цена позиции: от ${formatPrice(item.finalPriceRange.low)} до ${formatPrice(item.finalPriceRange.high)}\n\n`
+          : `  • Estimated Item Price: from ${formatPrice(item.finalPriceRange.low)} to ${formatPrice(item.finalPriceRange.high)}\n\n`;
+      } else {
+        tzText += `  • ${isRu ? 'Предположительная цена позиции' : 'Estimated Item Price'}: ${formatPrice(item.itemFinalPrice)}\n\n`;
+      }
     });
 
     tzText += isRu ? `[ КОД СИДА ДЛЯ ВОССТАНОВЛЕНИЯ РАСЧЁТА ]\n` : `[ RECOVERY SEED CODE ]\n`;
@@ -2740,10 +3074,10 @@ export default function App() {
     if (tzOutput) {
       generateTZ(false);
     }
-  }, [sprites, speedRate, currency, usdRate, lang]);
+  }, [sprites, calcMode, templateSprites, speedRate, currency, usdRate, lang]);
 
   return (
-    <div className="min-h-screen bg-[#1c0d2b] text-[#fbf7ff] font-sans antialiased pb-20 selection:bg-[#c084fc] selection:text-[#1c0d2b] relative overflow-x-hidden">
+    <div className={`min-h-screen bg-[#1c0d2b] text-[#fbf7ff] font-sans antialiased pb-20 selection:bg-[#c084fc] selection:text-[#1c0d2b] relative overflow-x-hidden ${isAccessibleMode ? 'accessible-mode' : ''}`}>
       {/* Dynamic Pixel Dithered Nebula Fog Overlay */}
       <DitherNebula isExpanded={isExpanded} />
 
@@ -2884,11 +3218,11 @@ export default function App() {
 
         </div>
 
-        {/* Ambient Preferences (BGM / BG animation) beneath - big prominent premium buttons */}
-        <div className="flex flex-col sm:flex-row items-stretch gap-4 mt-4 w-full">
+        {/* Ambient Preferences (BGM / BG animation / Accessible Mode) beneath - big prominent premium buttons */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-4 w-full">
           <button
             onClick={togglePlay}
-            className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-sm sm:text-base shadow-lg duration-200 ${
+            className={`flex items-center justify-center gap-2.5 px-4 py-3.5 sm:py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-xs sm:text-sm lg:text-base shadow-lg duration-200 ${
               isPlaying 
                 ? 'bg-[#210c30] text-[#ebd6f7] border-[#c084fc] hover:border-purple-300 shadow-[0_0_20px_rgba(192,132,252,0.2)]'
                 : 'bg-[#1b0826]/80 text-purple-400/50 border-[#3c1753]/60 hover:text-[#ebd6f7]/80 hover:border-purple-500/60'
@@ -2897,20 +3231,20 @@ export default function App() {
           >
             {isPlaying ? (
               <>
-                <Volume2 className="w-5.5 h-5.5 text-emerald-400 animate-pulse shrink-0" />
-                <span className="tracking-wide">BGM: {lang === 'ru' ? 'ВКЛЮЧЕНА' : 'ON'}</span>
+                <Volume2 className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-emerald-400 animate-pulse shrink-0" />
+                <span className="tracking-wide">{lang === 'ru' ? 'МУЗЫКА: ВКЛ' : 'BGM: ON'}</span>
               </>
             ) : (
               <>
-                <VolumeX className="w-5.5 h-5.5 text-rose-400 shrink-0" />
-                <span className="tracking-wide">BGM: {lang === 'ru' ? 'ВЫКЛЮЧЕНА' : 'OFF'}</span>
+                <VolumeX className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-rose-400 shrink-0" />
+                <span className="tracking-wide">{lang === 'ru' ? 'МУЗЫКА: ВЫКЛ' : 'BGM: OFF'}</span>
               </>
             )}
           </button>
 
           <button
             onClick={toggleBg}
-            className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-sm sm:text-base shadow-lg duration-200 ${
+            className={`flex items-center justify-center gap-2.5 px-4 py-3.5 sm:py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-xs sm:text-sm lg:text-base shadow-lg duration-200 ${
               isBgEnabled
                 ? 'bg-[#210c30] text-[#ebd6f7] border-[#c084fc] hover:border-purple-300 shadow-[0_0_20px_rgba(192,132,252,0.2)]'
                 : 'bg-[#1b0826]/80 text-purple-400/50 border-[#3c1753]/60 hover:text-[#ebd6f7]/80 hover:border-purple-500/60'
@@ -2919,13 +3253,39 @@ export default function App() {
           >
             {isBgEnabled ? (
               <>
-                <Sparkles className="w-5.5 h-5.5 text-yellow-400 animate-pulse shrink-0" />
+                <Sparkles className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-yellow-400 animate-pulse shrink-0" />
                 <span className="tracking-wide">{lang === 'ru' ? 'АКТИВНЫЙ ФОН: ВКЛ' : 'NEBULA BG: ON'}</span>
               </>
             ) : (
               <>
-                <EyeOff className="w-5.5 h-5.5 text-rose-400 shrink-0" />
+                <EyeOff className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-rose-400 shrink-0" />
                 <span className="tracking-wide">{lang === 'ru' ? 'АКТИВНЫЙ ФОН: ВЫКЛ' : 'NEBULA BG: OFF'}</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={toggleAccessibleMode}
+            className={`flex items-center justify-center gap-2.5 px-4 py-3.5 sm:py-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 select-none font-black text-xs sm:text-sm lg:text-base shadow-lg duration-200 ${
+              isAccessibleMode
+                ? 'bg-[#281503] text-amber-200 border-amber-400 hover:border-amber-300 shadow-[0_0_20px_rgba(251,191,36,0.35)] ring-2 ring-amber-400/50'
+                : 'bg-[#1b0826]/80 text-purple-400/50 border-[#3c1753]/60 hover:text-[#ebd6f7]/80 hover:border-purple-500/60'
+            }`}
+            title={
+              isAccessibleMode
+                ? (lang === 'ru' ? 'Выключить крупный шрифт' : 'Disable large text mode')
+                : (lang === 'ru' ? 'Включить крупный шрифт (увеличенный размер абсолютно везде)' : 'Enable large text mode (large readable font everywhere)')
+            }
+          >
+            {isAccessibleMode ? (
+              <>
+                <Glasses className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-amber-400 animate-bounce shrink-0" />
+                <span className="tracking-wide text-amber-200">{lang === 'ru' ? 'КРУПНЫЙ ШРИФТ: ВКЛ' : 'LARGE TEXT: ON'}</span>
+              </>
+            ) : (
+              <>
+                <Glasses className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-purple-400/50 shrink-0" />
+                <span className="tracking-wide">{lang === 'ru' ? 'КРУПНЫЙ ШРИФТ: ВЫКЛ' : 'LARGE TEXT: OFF'}</span>
               </>
             )}
           </button>
@@ -3290,7 +3650,84 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          {/* List of Sprite Blocks */}
+          {/* Mode Switcher: Шаблонный vs Точечный */}
+          <div className="mb-8 relative z-10">
+            <div className="bg-[#12051d] p-1.5 sm:p-2 rounded-2xl border-2 border-[#3d1a56] shadow-xl grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setCalcMode('template')}
+                className={`relative px-5 py-4 rounded-xl font-bold transition-all duration-200 cursor-pointer text-left flex items-center gap-3.5 ${
+                  calcMode === 'template'
+                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-[0_0_25px_rgba(192,132,252,0.4)] border border-purple-300/40'
+                    : 'bg-transparent text-[#ebd6f7]/70 hover:text-white hover:bg-purple-950/30 border border-transparent'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  calcMode === 'template' ? 'bg-purple-900/60 border-purple-200/50' : 'bg-[#1b0a2a] border-[#3d1a56]'
+                }`}>
+                  <Sparkles className={`w-5 h-5 ${calcMode === 'template' ? 'text-amber-300 animate-spin-slow' : 'text-purple-400'}`} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-display font-black uppercase tracking-wider">
+                    {t.calcModeTemplate}
+                  </div>
+                  <div className={`text-xs font-sans truncate ${calcMode === 'template' ? 'text-purple-100/90' : 'text-[#ebd6f7]/50'}`}>
+                    {t.calcModeTemplateDesc}
+                  </div>
+                </div>
+                {calcMode === 'template' && (
+                  <span className="ml-auto text-[10px] font-mono font-black uppercase tracking-wider bg-white/20 text-white px-2.5 py-1 rounded-full border border-white/30 hidden sm:inline-block shrink-0">
+                    {lang === 'ru' ? 'АКТИВЕН' : 'ACTIVE'}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCalcMode('granular')}
+                className={`relative px-5 py-4 rounded-xl font-bold transition-all duration-200 cursor-pointer text-left flex items-center gap-3.5 ${
+                  calcMode === 'granular'
+                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-[0_0_25px_rgba(192,132,252,0.4)] border border-purple-300/40'
+                    : 'bg-transparent text-[#ebd6f7]/70 hover:text-white hover:bg-purple-950/30 border border-transparent'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  calcMode === 'granular' ? 'bg-purple-900/60 border-purple-200/50' : 'bg-[#1b0a2a] border-[#3d1a56]'
+                }`}>
+                  <Sliders className={`w-5 h-5 ${calcMode === 'granular' ? 'text-cyan-300' : 'text-purple-400'}`} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-display font-black uppercase tracking-wider">
+                    {t.calcModeGranular}
+                  </div>
+                  <div className={`text-xs font-sans truncate ${calcMode === 'granular' ? 'text-purple-100/90' : 'text-[#ebd6f7]/50'}`}>
+                    {t.calcModeGranularDesc}
+                  </div>
+                </div>
+                {calcMode === 'granular' && (
+                  <span className="ml-auto text-[10px] font-mono font-black uppercase tracking-wider bg-white/20 text-white px-2.5 py-1 rounded-full border border-white/30 hidden sm:inline-block shrink-0">
+                    {lang === 'ru' ? 'АКТИВЕН' : 'ACTIVE'}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {calcMode === 'template' ? (
+            <TemplateCalculator
+              items={templateItems}
+              onAddItem={handleAddTemplateItem}
+              onRemoveItem={handleRemoveTemplateItem}
+              onUpdateItem={handleUpdateTemplateItem}
+              onConvertToGranular={handleConvertToGranular}
+              getItemPrice={getTemplateItemPrice}
+              lang={lang}
+              formatPrice={formatPrice}
+              addAssetBtnText={t.addAssetBtn}
+            />
+          ) : (
+            <>
+              {/* List of Sprite Blocks */}
           <div className="space-y-6">
             {/* Collapsed Assets Grid (Clean responsive card layout) */}
             <AnimatePresence>
@@ -3596,10 +4033,10 @@ export default function App() {
                         {/* Subtotal badge */}
                         <div id="tour-item-price" className="text-xs sm:text-sm font-bold text-[#f7f5ef] bg-[#12051d] px-3.5 py-1.5 rounded-xl border border-purple-500/20 shadow-inner font-mono">
                           {calculated.isInvalidSize ? (
-                            <span className="text-red-400 animate-pulse">! SIZE</span>
+                            <span className="text-red-400 font-semibold animate-pulse">{t.invalidSizeBlocked || '! SIZE'}</span>
                           ) : (
                             <span className="text-purple-300 font-extrabold">
-                              {formatPrice(calculated.totalPrice)}
+                              {formatPrice(calculated.priceRange || calculated.totalPrice)}
                             </span>
                           )}
                         </div>
@@ -4630,7 +5067,7 @@ export default function App() {
                         <span className="text-xs font-mono opacity-70 lowercase">*{t.descRequiredError.split(' ')[0]}</span>
                       </label>
                       <textarea
-                        rows={4}
+                        rows={7}
                         value={sprite.description}
                         onChange={(e) => {
                           updateSpriteField(sprite.id, 'description', e.target.value);
@@ -4639,7 +5076,7 @@ export default function App() {
                             setValidationError(false);
                           }
                         }}
-                        className={`w-full bg-[#12051d] border-2 rounded-xl px-4 py-3 text-sm text-[#fbf7ff] placeholder-[#ebd6f7]/40 focus:outline-none focus:border-purple-300 focus:bg-[#1c082c] transition-all duration-200 resize-y min-h-[96px] ${
+                        className={`w-full bg-[#12051d] border-2 rounded-xl px-4 py-3 text-sm text-[#fbf7ff] placeholder-[#ebd6f7]/40 focus:outline-none focus:border-purple-300 focus:bg-[#1c082c] transition-all duration-200 resize-y min-h-[160px] leading-relaxed ${
                           validationError && !sprite.description.trim() ? 'border-red-500 bg-red-950/20 shadow-[0_0_15px_rgba(239,68,68,0.15)]' : 'border-[#3d1a56]'
                         }`}
                         placeholder={t.taskDescPlaceholder}
@@ -4651,22 +5088,212 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Individual sprite cost box */}
-                    <div id="tour-complexity" className="mt-5 bg-[#12051d]/60 p-3.5 rounded-xl border border-[#3d1a56] flex flex-wrap justify-between items-center gap-2">
-                      <span className="text-xs text-[#ebd6f7]/80 font-mono">
-                        {t.spriteAutoCalcNote}
-                      </span>
-                      <div className="text-sm font-bold text-[#f7f5ef] bg-purple-950/30 px-3.5 py-1.5 rounded-lg border border-purple-500/20 shadow-inner">
-                        {t.positionPriceLabel}{' '}
-                        {calculated.isInvalidSize ? (
-                          <span className="text-red-400 text-sm font-mono font-black uppercase animate-pulse">
-                            {lang === 'ru' ? 'недопустимое значение' : 'invalid value'}
+                    {/* Position Pricing & Manual Price Override */}
+                    <div className="mt-5 pt-4 border-t border-[#ebd6f7]/10 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <Coins className="w-4 h-4 text-purple-400" />
+                          <span className="text-xs font-black uppercase tracking-wider text-purple-200">
+                            {t.priceModeLabel}
                           </span>
-                        ) : (
-                          <span className="text-purple-300 text-base font-mono font-black">
-                            {formatPrice(calculated.totalPrice)}
-                          </span>
+                        </div>
+
+                        {/* Segmented Switch: Auto vs Manual */}
+                        <div className="relative bg-[#0a0212] border border-[#3d1a56] rounded-xl p-0.5 flex items-center overflow-hidden">
+                          {/* Auto calculation button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateSpriteField(sprite.id, 'priceMode', 'auto');
+                            }}
+                            className={`relative z-10 px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
+                              (sprite.priceMode || 'auto') === 'auto'
+                                ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.45)]'
+                                : 'text-[#ebd6f7]/70 hover:text-white'
+                            }`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>{t.priceModeAuto}</span>
+                          </button>
+
+                          {/* Manual exact price button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const fallbackPrice = (sprite.manualPrice && sprite.manualPrice > 0)
+                                ? sprite.manualPrice
+                                : (calculated.animatedSinglePrice || 500);
+                              setSprites(prev => prev.map(s => s.id === sprite.id ? {
+                                ...s,
+                                priceMode: 'manual',
+                                manualPrice: fallbackPrice
+                              } : s));
+                            }}
+                            className={`relative z-10 px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
+                              sprite.priceMode === 'manual'
+                                ? 'bg-emerald-600 text-white shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+                                : 'text-[#ebd6f7]/70 hover:text-white'
+                            }`}
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                            <span>{t.priceModeManual}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Manual Price Panel (appears when priceMode === 'manual') */}
+                      <AnimatePresence>
+                        {sprite.priceMode === 'manual' && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="bg-[#12051d]/90 border-2 border-emerald-500/40 rounded-xl p-4 space-y-3.5 shadow-lg shadow-emerald-950/20">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <label className="text-xs font-black text-emerald-300 uppercase tracking-wider block">
+                                    {t.manualPriceInputLabel}
+                                  </label>
+                                  <p className="text-[11px] text-[#ebd6f7]/70 mt-0.5 max-w-md">
+                                    {t.manualPriceHelp}
+                                  </p>
+                                </div>
+
+                                {/* Interactive Price Stepper & Custom Input */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = sprite.manualPrice ?? calculated.animatedSinglePrice ?? 500;
+                                      const next = Math.max(0, current - 50);
+                                      updateSpriteField(sprite.id, 'manualPrice', next);
+                                    }}
+                                    className="w-9 h-9 rounded-lg bg-[#270d3c] hover:bg-purple-800 border border-purple-400/40 text-white font-mono font-black text-xs flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow"
+                                    title="-50 ₽"
+                                  >
+                                    -50
+                                  </button>
+
+                                  <div className="relative flex items-center">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="50"
+                                      value={sprite.manualPrice ?? calculated.animatedSinglePrice ?? 500}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const val = raw === '' ? 0 : Math.max(0, parseInt(raw, 10) || 0);
+                                        updateSpriteField(sprite.id, 'manualPrice', val);
+                                      }}
+                                      className="w-32 text-center font-mono font-black text-base bg-[#0a0212] border-2 border-emerald-500/70 focus:border-emerald-400 rounded-lg py-1.5 px-3 text-emerald-300 focus:outline-none shadow-inner"
+                                      placeholder="500"
+                                    />
+                                    <span className="absolute right-2.5 text-xs font-mono font-bold text-emerald-400/70 pointer-events-none">
+                                      ₽
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = sprite.manualPrice ?? calculated.animatedSinglePrice ?? 500;
+                                      const next = current + 50;
+                                      updateSpriteField(sprite.id, 'manualPrice', next);
+                                    }}
+                                    className="w-9 h-9 rounded-lg bg-[#270d3c] hover:bg-purple-800 border border-purple-400/40 text-white font-mono font-black text-xs flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow"
+                                    title="+50 ₽"
+                                  >
+                                    +50
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Quick Presets */}
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#3d1a56]/50">
+                                <span className="text-[10px] uppercase font-mono tracking-wider text-[#ebd6f7]/50 mr-1">
+                                  {lang === 'ru' ? 'Шаблоны цены:' : 'Presets:'}
+                                </span>
+                                {[200, 350, 500, 750, 1000, 1500].map((preset) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => updateSpriteField(sprite.id, 'manualPrice', preset)}
+                                    className={`px-2 py-0.5 text-[11px] font-mono font-bold rounded border transition-all cursor-pointer ${
+                                      (sprite.manualPrice ?? calculated.animatedSinglePrice) === preset
+                                        ? 'bg-emerald-600/50 text-emerald-200 border-emerald-400'
+                                        : 'bg-[#180727] text-purple-200/80 border-[#3d1a56] hover:border-purple-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {preset} ₽
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Live breakdown of quantity surcharge and total */}
+                              <div className="bg-[#0a0212] rounded-xl p-3 border border-[#3d1a56] flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                                <div className="space-y-1">
+                                  <div className="text-white/90 flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[#ebd6f7]/60">{lang === 'ru' ? '1 оригинал:' : '1 original:'}</span>
+                                    <span className="font-bold text-emerald-300">{formatPrice(calculated.singlePriceRange)}</span>
+                                    <span className="text-[#ebd6f7]/60">× {sprite.countOrig} {lang === 'ru' ? 'шт.' : 'pcs.'} =</span>
+                                    <span className="font-black text-white">{formatPrice(calculated.blockOrigRange)}</span>
+                                  </div>
+                                  {sprite.countVar > 0 && (
+                                    <div className="text-white/90 flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[#ebd6f7]/60">{lang === 'ru' ? 'Вариации (50%):' : 'Variations (50%):'}</span>
+                                      <span className="font-bold text-emerald-300">{formatPrice(calculated.singleVarPriceRange)}</span>
+                                      <span className="text-[#ebd6f7]/60">× {sprite.countVar} {lang === 'ru' ? 'шт.' : 'pcs.'} =</span>
+                                      <span className="font-black text-white">{formatPrice(calculated.blockVarRange)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="text-right pl-3 border-l border-[#3d1a56]">
+                                  <span className="text-[10px] text-[#ebd6f7]/60 block uppercase tracking-wider font-bold">
+                                    {lang === 'ru' ? 'Итого за позицию' : 'Item Total'}
+                                  </span>
+                                  <span className="text-base font-black text-emerald-300">
+                                    {formatPrice(calculated.totalPrice)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
                         )}
+                      </AnimatePresence>
+
+                      {/* Individual sprite cost box */}
+                      <div id="tour-complexity" className="bg-[#12051d]/60 p-3.5 rounded-xl border border-[#3d1a56] flex flex-wrap justify-between items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                            sprite.priceMode === 'manual'
+                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                              : 'bg-purple-950/80 text-purple-300 border-purple-500/40'
+                          }`}>
+                            {sprite.priceMode === 'manual' ? t.manualFixedBadge : t.autoCalcBadge}
+                          </span>
+                          <span className="text-xs text-[#ebd6f7]/80 font-mono">
+                            {sprite.priceMode === 'manual'
+                              ? (lang === 'ru' ? `Фиксированная цена: ${formatPrice(calculated.singlePriceRange)} за 1 ориг.` : `Fixed price: ${formatPrice(calculated.singlePriceRange)} per 1 orig.`)
+                              : t.spriteAutoCalcNote}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-[#f7f5ef] bg-purple-950/30 px-3.5 py-1.5 rounded-lg border border-purple-500/20 shadow-inner">
+                          {t.positionPriceLabel}{' '}
+                          {calculated.isInvalidSize ? (
+                            <span className="text-red-400 text-sm font-mono font-black uppercase animate-pulse">
+                              {lang === 'ru' ? 'недопустимое значение' : 'invalid value'}
+                            </span>
+                          ) : (
+                            <span className={`text-base font-mono font-black ${
+                              sprite.priceMode === 'manual' ? 'text-emerald-300' : 'text-purple-300'
+                            }`}>
+                              {formatPrice(calculated.totalPrice)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     </div>
@@ -4689,6 +5316,8 @@ export default function App() {
               <span>{t.addAssetBtn}</span>
             </button>
           </div>
+            </>
+          )}
 
           {/* Global Order parameters */}
           <div id="tour-global" className="mt-12 bg-[#1a0729] rounded-2xl p-6 border-4 border-[#140620] relative overflow-hidden shadow-lg z-10">
@@ -4835,14 +5464,17 @@ export default function App() {
               </div>
             </div>
 
-                        <div id="tour-log" className="mt-10 mb-8 border-t border-[#ebd6f7]/10 pt-10 relative z-10">
-              <CalculationLog 
-                lang={lang} 
-                orderCalculations={orderCalculations} 
-                CATEGORIES_LIST={CATEGORIES_LIST} 
-                formatPrice={formatPrice} 
-              />
-            </div>
+            {/* Calculation Log: Only displayed in Granular mode */}
+            {calcMode === 'granular' && (
+              <div id="tour-log" className="mt-10 mb-8 border-t border-[#ebd6f7]/10 pt-10 relative z-10">
+                <CalculationLog 
+                  lang={lang} 
+                  orderCalculations={orderCalculations} 
+                  CATEGORIES_LIST={CATEGORIES_LIST} 
+                  formatPrice={formatPrice} 
+                />
+              </div>
+            )}
             {/* End of log component */}
             {/* Limit Warning Alert */}
             {orderCalculations.totalSpritesCount > 100 && (
@@ -4923,37 +5555,109 @@ export default function App() {
             </div>
 
             {/* Results widgets box */}
-            <div id="tour-summary" className="mt-8 pt-6 border-t border-[#ebd6f7]/15 grid grid-cols-1 sm:grid-cols-2 gap-5 text-center relative z-10">
-              <div id="tour-summary-price" className="bg-[#12051d] p-5 rounded-2xl border-2 border-[#3d1a56] shadow-inner relative overflow-hidden flex flex-col justify-center items-center">
-                <div className="text-sm font-bold text-[#ebd6f7]/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5 justify-center">
-                  <span>{t.totalPriceLabel}</span>
-                  {orderCalculations.hasBulkDiscount && (
-                    <span className="bg-emerald-500/20 text-emerald-300 text-sm font-black uppercase px-2 py-0.5 rounded-full border border-emerald-500/30 tracking-normal animate-pulse">
-                      {lang === 'ru' ? 'Скидка за опт' : 'Bulk discount'}
+            <div id="tour-summary" className="mt-8 pt-6 border-t border-[#ebd6f7]/15 relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-center">
+                {/* Estimated Price Card (Unified single block with larger numbers) */}
+                <div id="tour-summary-price" className="bg-[#12051d] p-5 sm:p-7 rounded-2xl border-2 border-purple-500/40 shadow-2xl relative overflow-hidden flex flex-col justify-between items-center min-h-[175px]">
+                  <div className="w-full flex items-center justify-between text-xs sm:text-sm font-extrabold uppercase tracking-wider text-purple-200/90 mb-2 flex-wrap gap-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]"></span>
+                      {t.totalPriceLabel}
                     </span>
-                  )}
-                </div>
-                <div className="flex flex-col items-center justify-center">
-                  {orderCalculations.hasBulkDiscount && (
-                    <div className="text-sm sm:text-base text-stone-300 font-extrabold mb-1.5 font-mono flex items-center gap-1.5">
-                      <span>{lang === 'ru' ? 'До скидки:' : 'Before discount:'}</span>
-                      <span className="line-through decoration-rose-500/80 decoration-2">{formatPrice(orderCalculations.priceBeforeDiscountTotal)}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {orderCalculations.hasBulkDiscount && (
+                        <span className="text-[11px] font-mono font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          {lang === 'ru' ? 'Оптовая скидка' : 'Bulk Discount'}
+                        </span>
+                      )}
+                      {noDeadline && (
+                        <span className="text-[11px] font-mono font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          {lang === 'ru' ? 'Без дедлайна (-25%)' : 'No Deadline (-25%)'}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className={`text-4xl font-display font-black font-mono tracking-tight ${orderCalculations.hasBulkDiscount ? 'text-emerald-400' : 'text-purple-300'}`}>
-                    {formatPrice(orderCalculations.finalPriceRub)}
+                  </div>
+
+                  <div className="my-auto py-2 w-full">
+                    {orderCalculations.hasDiscount && (
+                      <div className="text-xs sm:text-sm font-mono text-stone-300 mb-2.5 flex items-center justify-center gap-2 flex-wrap bg-purple-950/50 px-3 py-1.5 rounded-xl border border-purple-500/30 max-w-fit mx-auto shadow-inner">
+                        <span className="text-[#ebd6f7]/70 font-semibold">{lang === 'ru' ? 'До скидки:' : 'Before discount:'}</span>
+                        <span className="line-through decoration-rose-500 decoration-2 text-rose-300 font-bold font-mono">
+                          {orderCalculations.priceBeforeDiscountTotalRange.low !== orderCalculations.priceBeforeDiscountTotalRange.high ? (
+                            `${lang === 'ru' ? 'от' : 'from'} ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.low)} ${lang === 'ru' ? 'до' : 'to'} ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.high)}`
+                          ) : (
+                            formatPrice(orderCalculations.priceBeforeDiscountTotal)
+                          )}
+                        </span>
+                        <span className="text-emerald-300 bg-emerald-950/90 border border-emerald-500/50 font-black px-2 py-0.5 rounded-lg text-xs font-mono">
+                          -{formatPrice(orderCalculations.totalDiscountRange?.low === orderCalculations.totalDiscountRange?.high ? orderCalculations.totalDiscountRange?.low : (orderCalculations.totalDiscountRange || orderCalculations.totalDiscountAmount))}
+                        </span>
+                      </div>
+                    )}
+
+                    {orderCalculations.finalPriceRange && orderCalculations.finalPriceRange.low !== orderCalculations.finalPriceRange.high ? (
+                      <div className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-display font-black font-mono tracking-tight text-white flex items-baseline justify-center flex-wrap gap-x-2.5 gap-y-1 drop-shadow-md">
+                        <span className="text-purple-300/80 text-xl sm:text-2xl lg:text-3xl font-bold font-sans">
+                          {lang === 'ru' ? 'от' : 'from'}
+                        </span>
+                        <span className="text-white">
+                          {formatPrice(orderCalculations.finalPriceRange.low)}
+                        </span>
+                        <span className="text-purple-300/80 text-xl sm:text-2xl lg:text-3xl font-bold font-sans">
+                          {lang === 'ru' ? 'до' : 'to'}
+                        </span>
+                        <span className={orderCalculations.hasDiscount ? 'text-emerald-400' : 'text-fuchsia-300'}>
+                          {formatPrice(orderCalculations.finalPriceRange.high)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className={`text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-display font-black font-mono tracking-tight drop-shadow-md ${orderCalculations.hasDiscount ? 'text-emerald-400' : 'text-purple-300'}`}>
+                        {formatPrice(orderCalculations.finalPriceRub)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="w-full text-[11px] sm:text-xs text-[#ebd6f7]/60 font-mono mt-2 text-center border-t border-purple-500/20 pt-2 font-medium">
+                    {lang === 'ru' ? 'от минимальной суммы до максимальной' : 'from minimal to maximal'}
+                  </div>
+                </div>
+
+                {/* Prepayment Card (Exact amount from min price) */}
+                <div className="bg-[#0f1d18] p-5 sm:p-7 rounded-2xl border-2 border-emerald-500/50 shadow-2xl relative overflow-hidden flex flex-col justify-between items-center min-h-[175px]">
+                  <div className="w-full text-xs sm:text-sm font-extrabold uppercase tracking-wider text-emerald-200 mb-2 flex items-center justify-between flex-wrap gap-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+                      {t.prepaymentLabel}
+                    </span>
+                    <span className="bg-emerald-500/25 text-emerald-300 text-xs font-mono font-black px-2.5 py-0.5 rounded-full border border-emerald-500/40">
+                      {orderCalculations.prepayPercent}%
+                    </span>
+                  </div>
+
+                  <div className="my-auto py-2">
+                    <div className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-display font-black text-emerald-400 font-mono tracking-tight drop-shadow-md">
+                      {formatPrice(orderCalculations.prepayAmountRub)}
+                    </div>
+                  </div>
+
+                  <div className="w-full text-[11px] sm:text-xs text-emerald-300/90 font-mono mt-2 text-center border-t border-emerald-500/20 pt-2 font-medium">
+                    {orderCalculations.finalPriceRange && orderCalculations.finalPriceRange.low !== orderCalculations.finalPriceRange.high ? (
+                      lang === 'ru' 
+                        ? `Точно: ${orderCalculations.prepayPercent}% от мин. суммы (${formatPrice(orderCalculations.finalPriceRange.low)})`
+                        : `Exact: ${orderCalculations.prepayPercent}% from min. price (${formatPrice(orderCalculations.finalPriceRange.low)})`
+                    ) : (
+                      lang === 'ru' 
+                        ? `Точная сумма (${orderCalculations.prepayPercent}% от суммы)`
+                        : `Exact sum (${orderCalculations.prepayPercent}% of total)`
+                    )}
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="bg-[#12051d] p-5 rounded-2xl border-2 border-[#3d1a56] shadow-inner relative overflow-hidden flex flex-col justify-center items-center">
-                <div className="text-sm font-bold text-[#ebd6f7]/70 uppercase tracking-widest mb-1.5">
-                  {t.prepaymentLabel} ({orderCalculations.prepayPercent}%)
-                </div>
-                <div className="text-3xl font-display font-black text-fuchsia-300 font-mono">
-                  {formatPrice(orderCalculations.prepayAmountRub)}
-                </div>
-              </div>
+            {/* Approximate Price Range Disclaimer Banner */}
+            <div className="mt-3 px-4 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-center text-xs text-purple-200/90 font-sans leading-relaxed">
+              ⚠️ {t.finalDisclaimer}
             </div>
 
             {/* Bulk discount progress bar */}
@@ -5311,27 +6015,90 @@ export default function App() {
                       </div>
 
                       {/* Summary Pricing Cards */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="bg-[#1b0a2a]/80 p-4 rounded-xl border border-purple-500/20">
-                          <div className="text-xs uppercase font-bold text-purple-300/80 mb-1">{lang === 'ru' ? 'Сумма заказа' : 'Total Budget'}</div>
-                          <div className="text-lg font-black text-fuchsia-300 font-mono">{formatPrice(orderCalculations.finalPriceRub)}</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="bg-[#1b0a2a]/90 p-4 rounded-xl border border-purple-500/40 flex flex-col justify-between sm:col-span-2 lg:col-span-1">
+                          <div className="text-xs uppercase font-extrabold text-purple-200 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                              {t.totalPriceLabel}
+                            </span>
+                            {orderCalculations.hasDiscount && (
+                              <span className="text-[10px] text-emerald-300 font-mono font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                {lang === 'ru' ? 'Скидка' : 'Discount'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="py-1">
+                            {orderCalculations.hasDiscount && (
+                              <div className="text-xs text-stone-300 font-mono mb-1 flex items-center gap-1.5 flex-wrap">
+                                <span className="text-purple-300/70">{lang === 'ru' ? 'До скидки:' : 'Before:'}</span>
+                                <span className="line-through decoration-rose-500 text-rose-300 font-bold">
+                                  {orderCalculations.priceBeforeDiscountTotalRange.low !== orderCalculations.priceBeforeDiscountTotalRange.high ? (
+                                    `${lang === 'ru' ? 'от' : 'from'} ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.low)} ${lang === 'ru' ? 'до' : 'to'} ${formatPrice(orderCalculations.priceBeforeDiscountTotalRange.high)}`
+                                  ) : (
+                                    formatPrice(orderCalculations.priceBeforeDiscountTotal)
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {orderCalculations.finalPriceRange && orderCalculations.finalPriceRange.low !== orderCalculations.finalPriceRange.high ? (
+                              <div className="text-xl sm:text-2xl font-black text-white font-mono flex items-baseline gap-1.5 flex-wrap">
+                                <span className="text-purple-300/80 text-sm font-sans font-bold">{lang === 'ru' ? 'от' : 'from'}</span>
+                                <span>{formatPrice(orderCalculations.finalPriceRange.low)}</span>
+                                <span className="text-purple-300/80 text-sm font-sans font-bold">{lang === 'ru' ? 'до' : 'to'}</span>
+                                <span className={orderCalculations.hasDiscount ? 'text-emerald-400' : 'text-fuchsia-300'}>{formatPrice(orderCalculations.finalPriceRange.high)}</span>
+                              </div>
+                            ) : (
+                              <div className="text-xl sm:text-2xl font-black text-white font-mono">
+                                {formatPrice(orderCalculations.finalPriceRub)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-purple-300/60 font-mono mt-1">
+                            {lang === 'ru' ? 'от минимальной суммы до максимальной' : 'from minimal to maximal'}
+                          </div>
                         </div>
-                        <div className="bg-[#1b0a2a]/80 p-4 rounded-xl border border-emerald-500/20">
-                          <div className="text-xs uppercase font-bold text-emerald-400/80 mb-1">{lang === 'ru' ? 'Предоплата' : 'Prepayment'}</div>
-                          <div className="text-lg font-black text-emerald-400 font-mono">
+
+                        <div className="bg-[#0f1d18]/90 p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between">
+                          <div className="text-xs uppercase font-extrabold text-emerald-300 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                              {lang === 'ru' ? 'Предоплата' : 'Prepayment'}
+                            </span>
+                            <span className="bg-emerald-500/25 text-emerald-300 text-xs font-mono font-black px-2 py-0.5 rounded-full border border-emerald-500/40">
+                              {orderCalculations.prepayPercent}%
+                            </span>
+                          </div>
+                          <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono py-1">
                             {formatPrice(orderCalculations.prepayAmountRub)}
                           </div>
-                        </div>
-                        <div className="bg-[#1b0a2a]/80 p-4 rounded-xl border border-purple-500/20">
-                          <div className="text-xs uppercase font-bold text-purple-300/80 mb-1">{lang === 'ru' ? 'Всего позиций' : 'Total Items'}</div>
-                          <div className="text-lg font-bold text-white font-mono">{orderCalculations.totalSpritesCount} шт.</div>
-                        </div>
-                        <div className="bg-[#1b0a2a]/80 p-4 rounded-xl border border-purple-500/20">
-                          <div className="text-xs uppercase font-bold text-purple-300/80 mb-1">{lang === 'ru' ? 'Сроки' : 'Timeline'}</div>
-                          <div className="text-sm font-bold text-white uppercase mt-1">
-                            {noDeadline ? (lang === 'ru' ? 'БЕЗ ДЕДЛАЙНА' : 'NO DEADLINE') : (lang === 'ru' ? 'СТАНДАРТ' : 'STANDARD')}
+                          <div className="text-[10px] text-emerald-300/70 font-mono mt-1">
+                            {lang === 'ru' ? 'от мин. цены' : 'from min. price'}
                           </div>
                         </div>
+
+                        <div className="bg-[#1b0a2a]/90 p-4 rounded-xl border border-purple-500/20 flex flex-col justify-between">
+                          <div className="text-xs uppercase font-bold text-purple-300/80 mb-1">{lang === 'ru' ? 'Всего позиций' : 'Total Items'}</div>
+                          <div className="text-xl sm:text-2xl font-bold text-white font-mono py-1">{orderCalculations.totalSpritesCount} шт.</div>
+                          <div className="text-[10px] text-purple-300/60 font-mono mt-1">
+                            {lang === 'ru' ? 'в паспорте ТЗ' : 'in specification'}
+                          </div>
+                        </div>
+
+                        <div className="bg-[#1b0a2a]/90 p-4 rounded-xl border border-purple-500/20 flex flex-col justify-between">
+                          <div className="text-xs uppercase font-bold text-purple-300/80 mb-1">{lang === 'ru' ? 'Сроки' : 'Timeline'}</div>
+                          <div className="text-base sm:text-lg font-bold text-white uppercase mt-1 py-0.5">
+                            {noDeadline ? (lang === 'ru' ? 'БЕЗ ДЕДЛАЙНА' : 'NO DEADLINE') : (lang === 'ru' ? 'СТАНДАРТ' : 'STANDARD')}
+                          </div>
+                          <div className="text-[10px] text-purple-300/60 font-mono mt-1">
+                            {noDeadline ? '-25% скидка' : (lang === 'ru' ? 'стандартный срок' : 'standard')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Disclaimer banner */}
+                      <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-500/30 text-center text-xs text-purple-200/90 font-sans leading-relaxed">
+                        ⚠️ {t.finalDisclaimer}
                       </div>
 
                       {/* Items ticket list */}
@@ -5354,9 +6121,28 @@ export default function App() {
                                       <span className="text-xs font-black text-purple-300 bg-purple-900/40 px-1.5 py-0.5 rounded">#{String(item.index).padStart(2, '0')}</span>
                                       <span className="text-sm font-bold text-white leading-tight">{item.categoryName}</span>
                                     </div>
-                                    <div className="text-lg font-black font-mono text-fuchsia-300 mt-2">
-                                      {formatPrice(item.itemFinalPrice)}
-                                    </div>
+                                    {item.finalPriceRange && item.finalPriceRange.low !== item.finalPriceRange.high ? (
+                                      <div className="mt-2 space-y-0.5">
+                                        <div className="text-base sm:text-lg font-black font-mono text-white flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-purple-300/80 text-xs font-sans font-bold">{lang === 'ru' ? 'от' : 'from'}</span>
+                                          <span>{formatPrice(item.finalPriceRange.low)}</span>
+                                          <span className="text-purple-300/80 text-xs font-sans font-bold">{lang === 'ru' ? 'до' : 'to'}</span>
+                                          <span className="text-fuchsia-300">{formatPrice(item.finalPriceRange.high)}</span>
+                                        </div>
+                                        <div className="text-[10px] text-purple-300/60 font-mono">
+                                          {lang === 'ru' ? 'предположительная цена' : 'estimated price'}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="mt-2">
+                                        <div className="text-lg font-black font-mono text-fuchsia-300">
+                                          {formatPrice(item.itemFinalPrice)}
+                                        </div>
+                                        <div className="text-[10px] text-purple-300/60 font-mono">
+                                          {lang === 'ru' ? 'предположительная цена' : 'estimated price'}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className="space-y-1.5 text-xs font-mono text-[#ebd6f7]/90">
@@ -5608,8 +6394,8 @@ export default function App() {
                     </h4>
                     <p>
                       {lang === 'ru'
-                        ? 'Мы ценим доверие наших клиентов. Для небольших заказов до 2 000 руб. действует базовая предоплата 50%. С увеличением бюджета проекта процент предоплаты планомерно снижается до 10%.'
-                        : 'We appreciate the trust of our clients. For small orders up to 2,000 RUB, a baseline 50% prepayment is required. As the total budget expands, the percentage is reduced down to 10%.'}
+                        ? 'Мы ценим доверие наших клиентов. Для небольших заказов до 2 000 руб. действует базовая предоплата 50%. С увеличением бюджета проекта процент предоплаты планомерно снижается до 10%. Предоплата фиксируется как точная сумма и рассчитывается от минимальной стоимости заказа.'
+                        : 'We appreciate the trust of our clients. For small orders up to 2,000 RUB, a baseline 50% prepayment is required. As the total budget expands, the percentage is reduced down to 10%. The prepayment is fixed as an exact sum calculated from the minimum order price.'}
                     </p>
                   </div>
 

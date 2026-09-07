@@ -1,6 +1,135 @@
 export type Language = 'ru' | 'en';
 export type Currency = 'rub' | 'usd';
 
+export type PriceRange = { low: number; high: number };
+
+export interface SizeTier {
+  name: string; // 'S' | 'M' | 'L' | 'XL'
+  labelRu: string;
+  labelEn: string;
+  maxDim: number; // upper bound of max(w, h) in px
+  price: PriceRange; // ₽, simple detail, no anim
+}
+
+export const CATEGORY_PRICING_TABLES: Record<string, SizeTier[]> = {
+  '1': [ // Предметы / Тайлы / Окружение
+    { name: 'S', labelRu: 'до 16×16', labelEn: 'up to 16×16', maxDim: 16, price: { low: 150, high: 280 } },
+    { name: 'M', labelRu: '17–32 px', labelEn: '17–32 px', maxDim: 32, price: { low: 240, high: 380 } },
+    { name: 'L', labelRu: '33–64 px', labelEn: '33–64 px', maxDim: 64, price: { low: 360, high: 560 } },
+    { name: 'XL', labelRu: '65–128 px', labelEn: '65–128 px', maxDim: 128, price: { low: 540, high: 840 } },
+  ],
+  '2': [ // Текстурирование моделей
+    { name: 'S', labelRu: 'до 32×32', labelEn: 'up to 32×32', maxDim: 32, price: { low: 250, high: 400 } },
+    { name: 'M', labelRu: '33–64 px', labelEn: '33–64 px', maxDim: 64, price: { low: 290, high: 460 } },
+    { name: 'L', labelRu: '65–128 px', labelEn: '65–128 px', maxDim: 128, price: { low: 380, high: 590 } },
+    { name: 'XL', labelRu: '129–256 px', labelEn: '129–256 px', maxDim: 256, price: { low: 520, high: 790 } },
+  ],
+  '3': [ // UI: Базовые элементы
+    { name: 'S', labelRu: 'до 16×16', labelEn: 'up to 16×16', maxDim: 16, price: { low: 150, high: 250 } },
+    { name: 'M', labelRu: '17–32 px', labelEn: '17–32 px', maxDim: 32, price: { low: 190, high: 290 } },
+    { name: 'L', labelRu: '33–64 px', labelEn: '33–64 px', maxDim: 64, price: { low: 250, high: 390 } },
+    { name: 'XL', labelRu: '65–128 px', labelEn: '65–128 px', maxDim: 128, price: { low: 340, high: 520 } },
+  ],
+  '4': [ // UI: Окна, шрифты, статичные фоны
+    { name: 'S', labelRu: 'до 64×64', labelEn: 'up to 64×64', maxDim: 64, price: { low: 400, high: 650 } },
+    { name: 'M', labelRu: '65–128 px', labelEn: '65–128 px', maxDim: 128, price: { low: 480, high: 760 } },
+    { name: 'L', labelRu: '129–256 px', labelEn: '129–256 px', maxDim: 256, price: { low: 620, high: 980 } },
+    { name: 'XL', labelRu: '257–320 px', labelEn: '257–320 px', maxDim: 320, price: { low: 840, high: 1320 } },
+  ],
+  '5': [ // UI: Сложные фоны и логотипы
+    { name: 'S', labelRu: 'до 128×128', labelEn: 'up to 128×128', maxDim: 128, price: { low: 800, high: 1300 } },
+    { name: 'M', labelRu: '129–192 px', labelEn: '129–192 px', maxDim: 192, price: { low: 960, high: 1480 } },
+    { name: 'L', labelRu: '193–256 px', labelEn: '193–256 px', maxDim: 256, price: { low: 1220, high: 1850 } },
+    { name: 'XL', labelRu: '257–352 px', labelEn: '257–352 px', maxDim: 352, price: { low: 1600, high: 2450 } },
+  ],
+  '6': [ // Портреты / Спрайты диалогов
+    { name: 'S', labelRu: 'до 32×32', labelEn: 'up to 32×32', maxDim: 32, price: { low: 250, high: 400 } },
+    { name: 'M', labelRu: '33–48 px', labelEn: '33–48 px', maxDim: 48, price: { low: 330, high: 520 } },
+    { name: 'L', labelRu: '49–64 px', labelEn: '49–64 px', maxDim: 64, price: { low: 480, high: 760 } },
+    { name: 'XL', labelRu: '65–256 px', labelEn: '65–256 px', maxDim: 256, price: { low: 750, high: 1180 } },
+  ],
+  '7': [ // Minecraft-скины
+    { name: 'S', labelRu: 'Стандарт (64×64)', labelEn: 'Standard (64×64)', maxDim: 64, price: { low: 300, high: 500 } },
+    { name: 'M', labelRu: 'HD-текстура (128×128)', labelEn: 'HD Texture (128×128)', maxDim: 128, price: { low: 460, high: 750 } },
+  ],
+  '8': [ // Иное (Нестандартные задачи)
+    { name: 'S', labelRu: 'до 64×64', labelEn: 'up to 64×64', maxDim: 64, price: { low: 450, high: 750 } },
+    { name: 'M', labelRu: '65–128 px', labelEn: '65–128 px', maxDim: 128, price: { low: 620, high: 1000 } },
+    { name: 'L', labelRu: '129–256 px', labelEn: '129–256 px', maxDim: 256, price: { low: 940, high: 1520 } },
+    { name: 'XL', labelRu: '257–512 px', labelEn: '257–512 px', maxDim: 512, price: { low: 1450, high: 2350 } },
+  ],
+};
+
+export const COMPLEXITY_MULTIPLIER: Record<'simple' | 'medium' | 'detailed', PriceRange> = {
+  simple:   { low: 1.0, high: 1.15 },
+  medium:   { low: 1.25, high: 1.5 },
+  detailed: { low: 1.6, high: 2.1 },
+};
+
+export const ANIMATION_FLAT: Record<'none' | 'simple' | 'medium' | 'complex', PriceRange> = {
+  none:    { low: 0,   high: 0 },
+  simple:  { low: 150, high: 350 },   // 2–4 кадра
+  medium:  { low: 350, high: 750 },   // 5–8 кадров
+  complex: { low: 750, high: 1600 },  // 9+ кадров
+};
+
+export function getSizeTier(categoryId: string, width: number, height: number, skinType?: string): { tier: SizeTier; scaleMultiplier: number } {
+  const tiers = CATEGORY_PRICING_TABLES[categoryId] || CATEGORY_PRICING_TABLES['1'];
+  if (categoryId === '7') {
+    const isHD = skinType === '2';
+    const targetDim = isHD ? 128 : 64;
+    const matched = tiers.find(t => t.maxDim === targetDim) || tiers[0];
+    return { tier: matched, scaleMultiplier: 1.0 };
+  }
+  
+  // Calculate effective dimension:
+  // Balances square area (geometric mean) and maximum dimension so rectangular sprites (e.g. 16x64 sword)
+  // are not penalized as full 64x64 squares.
+  const dimArea = Math.sqrt(Math.max(1, width) * Math.max(1, height));
+  const dimMax = Math.max(1, width, height);
+  const effectiveDim = Math.round(dimArea * 0.65 + dimMax * 0.35);
+
+  for (let i = 0; i < tiers.length; i++) {
+    const t = tiers[i];
+    if (effectiveDim <= t.maxDim) {
+      if (i === 0) {
+        // First tier (S) - keep pure base rate without dropping below
+        return { tier: t, scaleMultiplier: 1.0 };
+      }
+      
+      // Smooth intra-tier interpolation between previous tier upper boundary and current tier upper boundary
+      // This ensures every pixel step (e.g. 48 -> 64) continuously and predictably changes the price!
+      const prevTier = tiers[i - 1];
+      const prevDim = prevTier.maxDim;
+      const currDim = t.maxDim;
+      const progress = Math.min(1.0, Math.max(0.0, (effectiveDim - prevDim) / (currDim - prevDim)));
+      
+      const interpolatedLow = Math.round(prevTier.price.low + (t.price.low - prevTier.price.low) * progress);
+      const interpolatedHigh = Math.round(prevTier.price.high + (t.price.high - prevTier.price.high) * progress);
+
+      const dynamicTier: SizeTier = {
+        ...t,
+        price: { low: interpolatedLow, high: interpolatedHigh }
+      };
+
+      return { tier: dynamicTier, scaleMultiplier: 1.0 };
+    }
+  }
+  
+  // Exceeds XL (highest tier in category)
+  // Use a heavily dampened sublinear logarithmic curve so huge canvas doesn't explode the price.
+  // For model texturing (2) and all UI categories (3, 4, 5), the growth coefficient is halved.
+  const topTier = tiers[tiers.length - 1];
+  const excessRatio = effectiveDim / topTier.maxDim;
+  if (excessRatio <= 1.0) {
+    return { tier: topTier, scaleMultiplier: 1.0 };
+  }
+  const isReducedSizeCat = ['2', '3', '4', '5'].includes(categoryId);
+  const sizeGrowthCoeff = isReducedSizeCat ? 0.15 : 0.25;
+  const scaleMultiplier = Math.round((1.0 + Math.log2(excessRatio) * sizeGrowthCoeff) * 100) / 100;
+  return { tier: topTier, scaleMultiplier: Math.max(1.0, scaleMultiplier) };
+}
+
 export interface CategoryData {
   id: string;
   nameRu: string;
@@ -52,6 +181,19 @@ export interface SpriteItemState {
   designMode?: 'reference' | 'scratch';
   styleMode?: 'free' | 'specific';
   styleName?: string;
+  priceMode?: 'auto' | 'manual';
+  manualPrice?: number;
+}
+
+export interface TemplateItemState {
+  id: number;
+  templateId: string;
+  count: number;
+  hasAnimation: boolean;
+  animDesc: string;
+  animDuration: number;
+  quality: 'optimal' | 'medium' | 'best';
+  taskDesc: string;
 }
 
 export const CATEGORIES_LIST: CategoryData[] = [
@@ -73,29 +215,29 @@ export const CATEGORIES_LIST: CategoryData[] = [
       'Tiles (Tilesets): Seamless textures of surfaces, blocks, and platforms for assembling levels.',
       'Asset Animation: Frame-by-frame animation for items (swings, glowing) and tiles (fluid mediums, interactive elements).'
     ],
-    basePrice: 250,
+    basePrice: 150,
     pixelPrice: 0,
     maxBaseSize: 128,
     minBaseSize: 32,
     supportsAnimation: true,
     useCasesRu: ['оружие и щиты', 'броня', 'зелья', 'блоки окружения', 'деревья и трава', 'мебель'],
     useCasesEn: ['weapons and shields', 'armor', 'potions', 'environment blocks', 'trees and grass', 'furniture'],
-    formulaHelpRu: 'Базовая ставка 250 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 32×32 px.',
-    formulaHelpEn: 'Base rate 250 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 32×32 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '16×16 – 128×128 px',
     preferredSizeEn: '16×16 – 128×128 px',
-    popularResRu: '32×32 px (средняя детализация)',
-    popularResEn: '32×32 px (medium detail)',
-    popularPriceNum: 645,
+    popularResRu: '32×32 px (тир M)',
+    popularResEn: '32×32 px (tier M)',
+    popularPriceNum: 310,
     examplesRu: [
-      { size: '16x16', price: '585 ₽' },
-      { size: '32x32', price: '645 ₽' },
-      { size: '64x64', price: '765 ₽' }
+      { size: 'до 16×16', price: '150 – 280 ₽' },
+      { size: '17–32 px', price: '240 – 380 ₽' },
+      { size: '33–64 px', price: '360 – 560 ₽' }
     ],
     examplesEn: [
-      { size: '16x16', price: '585 ₽' },
-      { size: '32x32', price: '645 ₽' },
-      { size: '64x64', price: '765 ₽' }
+      { size: 'up to 16×16', price: '150 – 280 ₽' },
+      { size: '17–32 px', price: '240 – 380 ₽' },
+      { size: '33–64 px', price: '360 – 560 ₽' }
     ],
     imagePath: '/images/cat1.gif'
   },
@@ -113,29 +255,29 @@ export const CATEGORIES_LIST: CategoryData[] = [
     ],
     noteRu: 'Расчет стоимости ведется строго по размеру исходной текстуры, а не по сложности визуальной модели.',
     noteEn: 'Cost calculation is strictly based on the size of the source texture, not on the complexity of the 3D model.',
-    basePrice: 350,
+    basePrice: 200,
     pixelPrice: 0,
     maxBaseSize: 256,
     minBaseSize: 64,
     supportsAnimation: true,
     useCasesRu: ['кубические модели', 'персонажи Blockbench', 'оружие', 'техника'],
     useCasesEn: ['blocky models', 'Blockbench characters', 'weapons', 'machinery'],
-    formulaHelpRu: 'Базовая ставка 350 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 64×64 px.',
-    formulaHelpEn: 'Base rate 350 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 64×64 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '64×64 – 256×256 px',
     preferredSizeEn: '64×64 – 256×256 px',
-    popularResRu: '64×64 px (средняя детализация)',
-    popularResEn: '64×64 px (medium detail)',
-    popularPriceNum: 975,
+    popularResRu: '64×64 px (тир M)',
+    popularResEn: '64×64 px (tier M)',
+    popularPriceNum: 375,
     examplesRu: [
-      { size: '16x16', price: '485 ₽' },
-      { size: '32x32', price: '540 ₽' },
-      { size: '64x64', price: '975 ₽' }
+      { size: 'до 32×32', price: '250 – 400 ₽' },
+      { size: '33–64 px', price: '290 – 460 ₽' },
+      { size: '65–128 px', price: '380 – 590 ₽' }
     ],
     examplesEn: [
-      { size: '16x16', price: '485 ₽' },
-      { size: '32x32', price: '540 ₽' },
-      { size: '64x64', price: '975 ₽' }
+      { size: 'up to 32×32', price: '250 – 400 ₽' },
+      { size: '33–64 px', price: '290 – 460 ₽' },
+      { size: '65–128 px', price: '380 – 590 ₽' }
     ],
     imagePath: '/images/cat2.gif'
   },
@@ -155,27 +297,27 @@ export const CATEGORIES_LIST: CategoryData[] = [
       'Icons: Graphical skill badges, effects, buffs/debuffs, or inventory slots.',
       'Indicators (Bars): Character status bars (health, mana, experience, stamina).'
     ],
-    basePrice: 250,
+    basePrice: 150,
     pixelPrice: 0,
     maxBaseSize: 128,
     minBaseSize: 32,
     supportsAnimation: true,
     useCasesRu: ['кнопки меню', 'иконки предметов', 'бары здоровья (HP / MP)', 'маленькие рамки'],
     useCasesEn: ['menu buttons', 'item icons', 'health bars (HP / MP)', 'small frames'],
-    formulaHelpRu: 'Базовая ставка 250 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 32×32 px.',
-    formulaHelpEn: 'Base rate 250 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 32×32 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '32×32 – 128×128 px',
     preferredSizeEn: '32×32 – 128×128 px',
-    popularResRu: '32×32 px (средняя детализация)',
-    popularResEn: '32×32 px (medium detail)',
-    popularPriceNum: 585,
+    popularResRu: '32×32 px (тир M)',
+    popularResEn: '32×32 px (tier M)',
+    popularPriceNum: 240,
     examplesRu: [
-      { size: '16x16', price: '290 ₽' },
-      { size: '32x32', price: '585 ₽' }
+      { size: 'до 16×16', price: '150 – 250 ₽' },
+      { size: '17–32 px', price: '190 – 290 ₽' }
     ],
     examplesEn: [
-      { size: '16x16', price: '290 ₽' },
-      { size: '32x32', price: '585 ₽' }
+      { size: 'up to 16×16', price: '150 – 250 ₽' },
+      { size: '17–32 px', price: '190 – 290 ₽' }
     ],
     imagePath: '/images/cat3.gif'
   },
@@ -195,27 +337,27 @@ export const CATEGORIES_LIST: CategoryData[] = [
       'Typography: Custom stylized pixel fonts designed for the project’s aesthetics.',
       'Logos & Backplates: Main titles, badges, and static loading screens or menu backgrounds.'
     ],
-    basePrice: 350,
+    basePrice: 250,
     pixelPrice: 0,
     maxBaseSize: 320,
     minBaseSize: 64,
     supportsAnimation: true,
     useCasesRu: ['сетка инвентаря', 'окна крафта', 'панели настроек', 'алфавитные шрифты'],
     useCasesEn: ['inventory slots grid', 'crafting windows', 'settings panels', 'custom fonts'],
-    formulaHelpRu: 'Базовая ставка 350 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 64×64 px.',
-    formulaHelpEn: 'Base rate 350 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 64×64 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '64×64 – 320×320 px',
     preferredSizeEn: '64×64 – 320×320 px',
-    popularResRu: '128×128 px (средняя детализация)',
-    popularResEn: '128×128 px (medium detail)',
-    popularPriceNum: 1675,
+    popularResRu: '128×128 px (тир M)',
+    popularResEn: '128×128 px (tier M)',
+    popularPriceNum: 620,
     examplesRu: [
-      { size: '64x64', price: '1275 ₽' },
-      { size: '128x128', price: '1675 ₽' }
+      { size: 'до 64×64', price: '400 – 650 ₽' },
+      { size: '65–128 px', price: '480 – 760 ₽' }
     ],
     examplesEn: [
-      { size: '64x64', price: '1275 ₽' },
-      { size: '128x128', price: '1675 ₽' }
+      { size: 'up to 64×64', price: '400 – 650 ₽' },
+      { size: '65–128 px', price: '480 – 760 ₽' }
     ],
     imagePath: '/images/cat4.gif'
   },
@@ -233,27 +375,27 @@ export const CATEGORIES_LIST: CategoryData[] = [
       'Artistic Backgrounds: Intricate full-scale panoramas, landscapes, and menu backdrops.',
       'Complex Logos: Premium main title logo art with elaborate texture work.'
     ],
-    basePrice: 700,
+    basePrice: 450,
     pixelPrice: 0,
     maxBaseSize: 352,
     minBaseSize: 96,
     supportsAnimation: true,
     useCasesRu: ['главные экраны', 'высокодетализированные заставки', 'логотипы игры'],
     useCasesEn: ['main menu backdrops', 'high-detail cutscene art', 'game title logos'],
-    formulaHelpRu: 'Базовая ставка 700 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 96×96 px.',
-    formulaHelpEn: 'Base rate 700 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 96×96 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '96×96 – 352×352 px',
     preferredSizeEn: '96×96 – 352×352 px',
-    popularResRu: '256×256 px (средняя детализация)',
-    popularResEn: '256×256 px (medium detail)',
-    popularPriceNum: 4950,
+    popularResRu: '192×192 px (тир M)',
+    popularResEn: '192×192 px (tier M)',
+    popularPriceNum: 1220,
     examplesRu: [
-      { size: '128x128', price: '3350 ₽' },
-      { size: '256x256', price: '4950 ₽' }
+      { size: 'до 128×128', price: '800 – 1 300 ₽' },
+      { size: '129–192 px', price: '960 – 1 480 ₽' }
     ],
     examplesEn: [
-      { size: '128x128', price: '3350 ₽' },
-      { size: '256x256', price: '4950 ₽' }
+      { size: 'up to 128×128', price: '800 – 1 300 ₽' },
+      { size: '129–192 px', price: '960 – 1 480 ₽' }
     ],
     imagePath: '/images/cat5.gif'
   },
@@ -273,27 +415,27 @@ export const CATEGORIES_LIST: CategoryData[] = [
     ],
     noteRu: 'Работа ведется исключительно в формате портрета (голова и плечевой пояс). Полные модели персонажей и спрайты во весь рост в данной категории не разрабатываются.',
     noteEn: 'Work is performed exclusively in a portrait format (head and shoulders). Full-body character models or full-length sprites are not created in this category.',
-    basePrice: 350,
+    basePrice: 200,
     pixelPrice: 0,
     maxBaseSize: 256,
     minBaseSize: 48,
     supportsAnimation: true,
     useCasesRu: ['портреты NPC', 'спрайты эмоций', 'аватары профилей', 'карточки героев'],
     useCasesEn: ['NPC dialogue expressions', 'emote icons', 'player profile photos', 'hero cards'],
-    formulaHelpRu: 'Базовая ставка 350 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 48×48 px.',
-    formulaHelpEn: 'Base rate 350 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 48×48 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '48×48 – 256×256 px',
     preferredSizeEn: '48×48 – 256×256 px',
-    popularResRu: '64×64 px (средняя детализация)',
-    popularResEn: '64×64 px (medium detail)',
-    popularPriceNum: 1530,
+    popularResRu: '48×48 px (тир M)',
+    popularResEn: '48×48 px (tier M)',
+    popularPriceNum: 425,
     examplesRu: [
-      { size: '32x32', price: '645 ₽' },
-      { size: '64x64', price: '1530 ₽' }
+      { size: 'до 32×32', price: '250 – 400 ₽' },
+      { size: '33–48 px', price: '330 – 520 ₽' }
     ],
     examplesEn: [
-      { size: '32x32', price: '645 ₽' },
-      { size: '64x64', price: '1530 ₽' }
+      { size: 'up to 32×32', price: '250 – 400 ₽' },
+      { size: '33–48 px', price: '330 – 520 ₽' }
     ],
     imagePath: '/images/cat6.gif'
   },
@@ -311,27 +453,27 @@ export const CATEGORIES_LIST: CategoryData[] = [
       'Custom Skins: Bespoke skins built completely from scratch based on descriptions, mood boards, or artwork.',
       'Skins Modifications: Seasonal or theme changes to existing skins (adding hats, alternative outfits, armor, or capes).'
     ],
-    basePrice: 300,
+    basePrice: 200,
     pixelPrice: 0,
     maxBaseSize: 128,
     minBaseSize: 64,
     supportsAnimation: true,
     useCasesRu: ['Скины игроков (64x64 / 128x128)', 'Скины мобов'],
     useCasesEn: ['Player Skins (64x64 / 128x128)', 'Mob textures'],
-    formulaHelpRu: 'Базовая ставка 300 ₽ (64x64 / 128x128 HD) + Сложность спрайта (+10% за уровень сложности).',
-    formulaHelpEn: 'Base rate 300 ₽ (64x64 / 128x128 HD) + Sprite complexity (+10% per complexity level).',
+    formulaHelpRu: 'Тировый расчёт (Стандарт 64×64 / HD 128×128 × Сложность). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Standard 64×64 / HD 128×128 × Complexity). Estimated price range.',
     preferredSizeRu: '64×64 / 128×128 px',
     preferredSizeEn: '64×64 / 128×128 px',
     popularResRu: '64×64 px (Стандартный скин)',
     popularResEn: '64×64 px (Standard Skin)',
-    popularPriceNum: 200,
+    popularPriceNum: 400,
     examplesRu: [
-      { size: 'Стандартный', price: '200 ₽' },
-      { size: 'HD-текстура', price: '200 ₽' }
+      { size: 'Стандарт (64×64)', price: '300 – 500 ₽' },
+      { size: 'HD-текстура (128×128)', price: '460 – 750 ₽' }
     ],
     examplesEn: [
-      { size: 'Standard Skin', price: '200 ₽' },
-      { size: 'HD Texture', price: '200 ₽' }
+      { size: 'Standard (64×64)', price: '300 – 500 ₽' },
+      { size: 'HD Texture (128×128)', price: '460 – 750 ₽' }
     ],
     imagePath: '/images/cat7.gif'
   },
@@ -347,25 +489,27 @@ export const CATEGORIES_LIST: CategoryData[] = [
     pointsEn: [
       'Custom graphic configurations, particle effects, Paintings, and pixel concepts.'
     ],
-    basePrice: 900,
+    basePrice: 400,
     pixelPrice: 0,
     maxBaseSize: 512,
     minBaseSize: 64,
     supportsAnimation: true,
     useCasesRu: ['Картины', 'эффекты частиц', 'кастомные концепты'],
     useCasesEn: ['Paintings', 'particle states', 'custom pixel concepts'],
-    formulaHelpRu: 'Базовая ставка 900 ₽ + Сложность спрайта (+10% за уровень сложности). Минимальный размер: 64×64 px.',
-    formulaHelpEn: 'Base rate 900 ₽ + Sprite complexity (+10% per complexity level). Minimum size: 64×64 px.',
+    formulaHelpRu: 'Тировый расчёт (Размер S/M/L/XL × Сложность × Анимация). Диапазон цен.',
+    formulaHelpEn: 'Tier-based calculation (Size S/M/L/XL × Complexity × Animation). Estimated price range.',
     preferredSizeRu: '64×64 – 512×512 px',
     preferredSizeEn: '64×64 – 512×512 px',
-    popularResRu: '64×64 px (средняя детализация)',
-    popularResEn: '64×64 px (medium detail)',
-    popularPriceNum: 1720,
+    popularResRu: '64×64 px (тир S)',
+    popularResEn: '64×64 px (tier S)',
+    popularPriceNum: 600,
     examplesRu: [
-      { size: '32x32', price: '1720 ₽' }
+      { size: 'до 64×64', price: '450 – 750 ₽' },
+      { size: '65–128 px', price: '620 – 1 000 ₽' }
     ],
     examplesEn: [
-      { size: '32x32', price: '1720 ₽' }
+      { size: 'up to 64×64', price: '450 – 750 ₽' },
+      { size: '65–128 px', price: '620 – 1 000 ₽' }
     ],
     imagePath: '/images/cat8.gif' // reuse items as fallback
   }
@@ -397,7 +541,7 @@ export const TRANSLATIONS = {
     speedHelpModerate: 'Разработка проходит в стандартном порядке очереди. Без наценок.',
     speedHelpPriority: 'Задача помещается в начало очереди разработки. Наценка составляет 25%.',
     calculationLogBtn: 'Лог расчетов',
-    totalPriceLabel: 'Итоговая стоимость заказа',
+    totalPriceLabel: 'Предположительная цена',
     prepaymentLabel: 'Размер предоплаты',
     calculationLogTitle: 'Лог математических калькуляций:',
     calculationLogEmpty: 'Добавьте ассеты для запуска калькуляций...',
@@ -431,8 +575,32 @@ export const TRANSLATIONS = {
     taskDescriptionLabel: '* Описание задачи (Обязательное поле):',
     taskDescPlaceholder: 'Например: Посох Некроманта с зеленым светящимся кристаллом',
     descRequiredError: 'Поле обязательно для генерации итогового ТЗ!',
+    priceModeLabel: 'Режим расчёта цены:',
+    priceModeAuto: 'Автоматический',
+    priceModeManual: 'Точная цена (ручной)',
+    manualPriceInputLabel: 'Точная цена за 1 оригинал (₽):',
+    manualPriceHelp: 'От этой фиксированной цены рассчитывается стоимость всех оригиналов, вариаций и надбавки за количество.',
+    manualFixedBadge: 'Ручная цена',
+    autoCalcBadge: 'Авто-расчёт',
     spriteAutoCalcNote: 'Стоимость рассчитывается автоматически на основе параметров',
     positionPriceLabel: 'Стоимость этой позиции:',
+    calcModeTemplate: 'Шаблонный',
+    calcModeGranular: 'Точечный',
+    calcModeTemplateDesc: 'Быстрый выбор готовых игровых шаблонов',
+    calcModeGranularDesc: 'Тонкая ручная настройка параметров каждого спрайта',
+    templateSelectTitle: 'Выберите шаблон ассета:',
+    templateSelectSubtitle: 'Кликните по подходящему шаблону, чтобы быстро рассчитать стоимость',
+    templateSpritesCount: 'Количество спрайтов (шт.):',
+    templateAnimLabel: 'Анимация спрайта:',
+    templateAnimToggle: 'Включить покадровую анимацию',
+    templateAnimDesc: 'Описание анимации:',
+    templateAnimDescPlaceholder: 'Например: Базовая анимация атаки и бега',
+    templateAnimDuration: 'Сколько должна идти (длительность в сек):',
+    templateConvertToGranular: 'Преобразовать шаблон в точечный расчёт',
+    templateConvertToGranularSub: 'Перенести шаблон в точечный калькулятор для детальной ручной настройки размеров, ракурса и стилей',
+    templateConvertedToast: 'Шаблон перенесён в точечный расчёт! Теперь вы можете вручную настроить все параметры.',
+    templateQualityLabel: 'Качество детализации:',
+    templateSelectedBadge: 'Выбранный шаблон',
     copiedSuccess: 'ТЗ скопировано в буфер обмена!',
     generateAlert: 'Сначала сгенерируйте ТЗ!',
     specEmptyAlert: 'Спецификация пуста!',
@@ -464,7 +632,7 @@ export const TRANSLATIONS = {
     tzVariants: 'Подвидов',
     tzDescription: 'Описание',
     tzPriority: 'ПРИОРИТЕТ СРОКОВ',
-    tzTotalPrice: 'ИТОГОВАЯ СТОИМОСТЬ',
+    tzTotalPrice: 'ПРЕДПОЛОЖИТЕЛЬНАЯ ЦЕНА',
     tzPrepayment: 'ПРЕДОПЛАТА',
     tzUrlNote: 'Ссылка на калькулятор автора: Village_',
     tzQueuePriority: 'Приоритет (наценка 25%)',
@@ -499,7 +667,9 @@ export const TRANSLATIONS = {
     loadStatusMedium: 'Средний (+20% на весь заказ)',
     loadStatusFull: 'Полный (+35% на весь заказ)',
     loadStatusFullNoDeadline: 'Полный (+35%, только без дедлайна)',
-    orderBlockedWarning: 'Внимание! Прием стандартных заказов временно приостановлен из-за полной загруженности исполнителя. Размещение заказа возможно только с опцией «Без дедлайна» (действует наценка +35%, скидка 25% отключена).'
+    orderBlockedWarning: 'Внимание! Прием стандартных заказов временно приостановлен из-за полной загруженности исполнителя. Размещение заказа возможно только с опцией «Без дедлайна» (действует наценка +35%, скидка 25% отключена).',
+    finalDisclaimer: 'Финальная стоимость фиксируется после детального согласования ТЗ',
+    invalidSizeBlocked: 'Размер превышает допустимый максимум (1000 px). Уменьшите размер холста.'
   },
   en: {
     title: 'Village_',
@@ -520,7 +690,7 @@ export const TRANSLATIONS = {
     speedHelpModerate: 'The work is done in standard queue order. No extra fees.',
     speedHelpPriority: 'Task is moved to the top of the queue. Extra rate of +25% is applied.',
     calculationLogBtn: 'Calculation Log',
-    totalPriceLabel: 'Total Order Price',
+    totalPriceLabel: 'Estimated Price',
     prepaymentLabel: 'Required Prepayment',
     calculationLogTitle: 'Mathematical Calculation Log:',
     calculationLogEmpty: 'Add assets to launch calculators...',
@@ -554,8 +724,32 @@ export const TRANSLATIONS = {
     taskDescriptionLabel: '* Task Description (Required Field):',
     taskDescPlaceholder: 'Example: Necromancer Staff with a glowing green crystal',
     descRequiredError: 'This field is required to generate the final specification!',
+    priceModeLabel: 'Pricing Mode:',
+    priceModeAuto: 'Automatic',
+    priceModeManual: 'Exact Price (Manual)',
+    manualPriceInputLabel: 'Exact price per 1 original (₽):',
+    manualPriceHelp: 'All originals, variations, and quantity surcharges will be calculated from this fixed price.',
+    manualFixedBadge: 'Manual Price',
+    autoCalcBadge: 'Auto Calc',
     spriteAutoCalcNote: 'Price is calculated automatically based on configuration',
     positionPriceLabel: 'Cost of this item:',
+    calcModeTemplate: 'Template',
+    calcModeGranular: 'Granular',
+    calcModeTemplateDesc: 'Quick selection of ready-made game templates',
+    calcModeGranularDesc: 'Detailed manual adjustment of every sprite parameter',
+    templateSelectTitle: 'Choose an Asset Template:',
+    templateSelectSubtitle: 'Click on a template to quickly calculate pricing',
+    templateSpritesCount: 'Number of sprites (pcs):',
+    templateAnimLabel: 'Sprite Animation:',
+    templateAnimToggle: 'Enable frame-by-frame animation',
+    templateAnimDesc: 'Animation description:',
+    templateAnimDescPlaceholder: 'Example: Basic attack and running cycle',
+    templateAnimDuration: 'Target duration (seconds):',
+    templateConvertToGranular: 'Convert Template to Granular Calculation',
+    templateConvertToGranularSub: 'Transfer template to granular calculator for detailed custom sizes, styles, and frames',
+    templateConvertedToast: 'Template converted to granular calculation! You can now adjust all settings manually.',
+    templateQualityLabel: 'Detail Quality Level:',
+    templateSelectedBadge: 'Selected Template',
     copiedSuccess: 'TZ successfully copied to clipboard!',
     generateAlert: 'Please generate the TZ first!',
     specEmptyAlert: 'The asset list is empty!',
@@ -587,7 +781,7 @@ export const TRANSLATIONS = {
     tzVariants: 'Variants',
     tzDescription: 'Description',
     tzPriority: 'QUEUE TIMEFRAME',
-    tzTotalPrice: 'TOTAL PRICE',
+    tzTotalPrice: 'ESTIMATED PRICE',
     tzPrepayment: 'PREPAYMENT',
     tzUrlNote: 'Link to author\'s calculator: Village_',
     tzQueuePriority: 'Priority (extra +25% rate)',
@@ -622,6 +816,8 @@ export const TRANSLATIONS = {
     loadStatusMedium: 'Medium (+20% on entire order)',
     loadStatusFull: 'Full (+35% on entire order)',
     loadStatusFullNoDeadline: 'Full (+35%, only No Deadline allowed)',
-    orderBlockedWarning: 'Notice! Standard orders are temporarily suspended due to full workload. Ordering is only available with the "No Deadline" option selected (+35% surcharge applies, 25% discount is deactivated).'
+    orderBlockedWarning: 'Notice! Standard orders are temporarily suspended due to full workload. Ordering is only available with the "No Deadline" option selected (+35% surcharge applies, 25% discount is deactivated).',
+    finalDisclaimer: 'Final price is fixed after detailed agreement on the task specification',
+    invalidSizeBlocked: 'Resolution exceeds maximum allowed (1000 px). Please reduce canvas size.'
   }
 };

@@ -75,7 +75,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
             <div className="text-right hidden sm:block">
               <span className="text-xs text-[#ebd6f7]/60 block font-mono">{isRu ? 'Итого:' : 'Total:'}</span>
               <span className="font-black font-mono text-purple-200 text-base sm:text-lg">
-                {formatPrice(orderCalculations.finalPriceRub)}
+                {formatPrice(orderCalculations.finalPriceRange || orderCalculations.finalPriceRub)}
               </span>
             </div>
             <div className={`p-2.5 rounded-xl bg-[#12051d] border border-[#3d1a56] text-purple-300 transition-transform duration-300 ${isLogOpen ? 'rotate-180 bg-purple-900/40 text-white' : ''}`}>
@@ -389,16 +389,16 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                               <div className="text-right font-mono">
                                 {hasDiscounts && (
                                   <span className="text-emerald-400 text-xs sm:text-sm font-bold block">
-                                    -{formatPrice(item.itemBulkDiscountAmount)} ({isRu ? 'скидка' : 'discount'})
+                                    -{formatPrice(item.itemBulkDiscountRange || item.itemBulkDiscountAmount)} ({isRu ? 'скидка' : 'discount'})
                                   </span>
                                 )}
                                 {hasSurcharges && (
                                   <span className="text-rose-400 text-xs sm:text-sm font-bold block">
-                                    +{formatPrice(item.itemSurcharge)} ({isRu ? 'наценка' : 'surcharge'})
+                                    +{formatPrice(item.itemSurchargeRange || item.itemSurcharge)} ({isRu ? 'наценка' : 'surcharge'})
                                   </span>
                                 )}
                                 <span className="text-lg sm:text-xl font-black text-purple-200">
-                                  {formatPrice(item.itemFinalPrice)}
+                                  {formatPrice(item.finalPriceRange || item.itemFinalPrice)}
                                 </span>
                               </div>
                             </div>
@@ -557,13 +557,13 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
 
                                       <div className="pt-2.5 border-t border-[#3d1a56] flex justify-between items-center font-bold text-white text-sm">
                                         <span>{isRu ? 'Цена 1 оригинала:' : 'Price per 1 Original:'}</span>
-                                        <span className="font-mono text-purple-200 font-black">{formatPrice(item.animatedSinglePrice)}</span>
+                                        <span className="font-mono text-purple-200 font-black">{formatPrice(item.singlePriceRange || item.animatedSinglePrice)}</span>
                                       </div>
 
                                       {item.countVar > 0 && (
                                         <div className="flex justify-between items-center text-xs text-[#ebd6f7]/70 font-mono">
                                           <span>{isRu ? 'Цена 1 вариации (50%):' : 'Price per 1 Variation (50%):'}</span>
-                                          <span className="font-bold text-stone-200">{formatPrice(item.singleVarPrice)}</span>
+                                          <span className="font-bold text-stone-200">{formatPrice(item.singleVarPriceRange || item.singleVarPrice)}</span>
                                         </div>
                                       )}
                                     </div>
@@ -579,19 +579,19 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                                     <div className="space-y-2.5 text-[#ebd6f7]/90 text-xs sm:text-sm">
                                       <div className="flex justify-between items-center border-b border-[#3d1a56]/60 pb-1.5">
                                         <span>{isRu ? 'Оригиналы' : 'Originals'} ({item.countOrig} {isRu ? 'шт.' : 'pcs'}):</span>
-                                        <span className="font-mono text-white font-bold">{formatPrice(item.animatedSinglePrice * item.countOrig)}</span>
+                                        <span className="font-mono text-white font-bold">{formatPrice(item.blockOrigRange || (item.animatedSinglePrice * item.countOrig))}</span>
                                       </div>
 
                                       {item.countVar > 0 && (
                                         <div className="flex justify-between items-center border-b border-[#3d1a56]/60 pb-1.5">
                                           <span>{isRu ? 'Вариации' : 'Variations'} ({item.countVar} {isRu ? 'шт.' : 'pcs'}):</span>
-                                          <span className="font-mono text-white font-bold">{formatPrice(item.singleVarPrice * item.countVar)}</span>
+                                          <span className="font-mono text-white font-bold">{formatPrice(item.blockVarRange || (item.singleVarPrice * item.countVar))}</span>
                                         </div>
                                       )}
 
                                       <div className="flex justify-between items-center text-stone-300">
                                         <span>{isRu ? 'Сумма без скидки:' : 'Item Subtotal (Gross):'}</span>
-                                        <span className="font-mono font-bold">{formatPrice(item.itemPriceBeforeDiscount)}</span>
+                                        <span className="font-mono font-bold">{formatPrice(item.itemPriceBeforeDiscountRange || item.itemPriceBeforeDiscount)}</span>
                                       </div>
 
                                       {hasDiscounts && (
@@ -600,7 +600,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                                             <span className="font-bold block text-xs">{isRu ? 'Накопительная оптовая скидка:' : 'Wholesale Volume Discount:'}</span>
                                             <span className="text-xs opacity-80">{isRu ? 'С учётом позиции в общем заказе' : 'Based on cumulative count'}</span>
                                           </div>
-                                          <span className="font-mono font-black text-base">-{formatPrice(item.itemBulkDiscountAmount)}</span>
+                                          <span className="font-mono font-black text-base">-{formatPrice(item.itemBulkDiscountRange || item.itemBulkDiscountAmount)}</span>
                                         </div>
                                       )}
 
@@ -610,13 +610,13 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                                             <span className="font-bold block text-xs">{isRu ? 'Наценка за перегруз (>100 спрайтов):' : 'Limit Exceeded Surcharge (>100):'}</span>
                                             <span className="text-xs opacity-80">+100% {isRu ? 'за превышение очереди' : 'for queue limit'}</span>
                                           </div>
-                                          <span className="font-mono font-black text-base">+{formatPrice(item.itemSurcharge)}</span>
+                                          <span className="font-mono font-black text-base">+{formatPrice(item.itemSurchargeRange || item.itemSurcharge)}</span>
                                         </div>
                                       )}
 
                                       <div className="pt-3 border-t border-[#3d1a56] flex justify-between items-center font-black text-purple-200 text-sm sm:text-base">
                                         <span className="uppercase tracking-wider">{isRu ? 'Итого за позицию:' : 'Item Final Price:'}</span>
-                                        <span className="font-mono text-xl text-fuchsia-300">{formatPrice(item.itemFinalPrice)}</span>
+                                        <span className="font-mono text-xl text-fuchsia-300">{formatPrice(item.finalPriceRange || item.itemFinalPrice)}</span>
                                       </div>
                                     </div>
                                   </div>
@@ -658,20 +658,20 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
 
                     <div className="flex justify-between items-center text-[#ebd6f7]">
                       <span>{isRu ? 'Сумма всех позиций (брутто):' : 'Sum of all items (gross):'}</span>
-                      <span className="font-bold text-white">{formatPrice(orderCalculations.baseTotalRounded)}</span>
+                      <span className="font-bold text-white">{formatPrice(orderCalculations.baseTotalRange || orderCalculations.baseTotalRounded)}</span>
                     </div>
 
                     {orderCalculations.bulkDiscountAmount > 0 && (
                       <div className="flex justify-between items-center text-emerald-400 font-bold">
                         <span>{isRu ? 'Суммарная оптовая скидка:' : 'Total Wholesale Discount:'}</span>
-                        <span>-{formatPrice(orderCalculations.bulkDiscountAmount)}</span>
+                        <span>-{formatPrice(orderCalculations.bulkDiscountRange || orderCalculations.bulkDiscountAmount)}</span>
                       </div>
                     )}
 
                     {orderCalculations.surchargeAmount > 0 && (
                       <div className="flex justify-between items-center text-rose-400 font-bold">
                         <span>{isRu ? 'Наценка за >100 спрайтов:' : 'Over-100 Surcharge:'}</span>
-                        <span>+{formatPrice(orderCalculations.surchargeAmount)}</span>
+                        <span>+{formatPrice(orderCalculations.surchargeRange || orderCalculations.surchargeAmount)}</span>
                       </div>
                     )}
 
@@ -681,7 +681,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                           <Flame className="w-4 h-4 text-amber-400" />
                           <span>{isRu ? 'Наценка за загруженность:' : 'Artist Queue Load Markup:'}</span>
                         </span>
-                        <span>+{formatPrice(orderCalculations.loadMarkupAmount)}</span>
+                        <span>+{formatPrice(orderCalculations.loadMarkupRange || orderCalculations.loadMarkupAmount)}</span>
                       </div>
                     )}
 
@@ -691,14 +691,14 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                           <Clock className="w-4 h-4 text-emerald-400" />
                           <span>{isRu ? 'Скидка «Без дедлайна» (-25%):' : '"No Deadline" Discount (-25%):'}</span>
                         </span>
-                        <span>-{formatPrice(orderCalculations.noDeadlineDiscountAmount)}</span>
+                        <span>-{formatPrice(orderCalculations.noDeadlineDiscountRange || orderCalculations.noDeadlineDiscountAmount)}</span>
                       </div>
                     )}
 
                     <div className="pt-3 border-t border-purple-500/30 flex justify-between items-center font-sans font-black text-white text-base sm:text-lg">
                       <span className="uppercase tracking-wider">{isRu ? 'ИТОГОВАЯ СУММА:' : 'FINAL TOTAL:'}</span>
                       <span className="text-2xl sm:text-3xl text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 to-purple-200 font-mono">
-                        {formatPrice(orderCalculations.finalPriceRub)}
+                        {formatPrice(orderCalculations.finalPriceRange || orderCalculations.finalPriceRub)}
                       </span>
                     </div>
                   </div>
@@ -725,7 +725,7 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                       <div className="flex justify-between text-[#ebd6f7]/80">
                         <span>{isRu ? 'Формула взноса:' : 'Deposit Formula:'}</span>
                         <span className="font-bold text-purple-300 font-mono">
-                          {formatPrice(orderCalculations.finalPriceRub)} × {orderCalculations.prepayPercent}%
+                          {formatPrice(orderCalculations.finalPriceRange || orderCalculations.finalPriceRub)} × {orderCalculations.prepayPercent}%
                         </span>
                       </div>
                     </div>
@@ -733,11 +733,18 @@ export function CalculationLog({ lang, orderCalculations, CATEGORIES_LIST, forma
                     <div className="pt-3 border-t border-purple-500/30 flex justify-between items-center font-sans font-black text-emerald-400 text-base sm:text-lg">
                       <span className="uppercase tracking-wider">{isRu ? 'К ПРЕДОПЛАТЕ:' : 'PREPAYMENT DEPOSIT:'}</span>
                       <span className="text-2xl sm:text-3xl font-mono text-emerald-300">
-                        {formatPrice(orderCalculations.prepayAmountRub)}
+                        {formatPrice(orderCalculations.prepayRange || orderCalculations.prepayAmountRub)}
                       </span>
                     </div>
                   </div>
 
+                </div>
+
+                {/* Final Disclaimer Banner */}
+                <div className="mt-4 p-3 rounded-xl bg-purple-950/40 border border-purple-400/30 text-center font-sans text-xs text-purple-200/90 leading-relaxed">
+                  {isRu 
+                    ? '⚠️ Внимание: указана ориентировочная стоимость (вилка цен). Финальная цена утверждается после детального обсуждения и фиксации ТЗ.'
+                    : '⚠️ Note: Approximate price range shown. Final price is confirmed after detailed discussion and scope lock.'}
                 </div>
               </div>
 

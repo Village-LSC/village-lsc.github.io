@@ -119,3 +119,77 @@
   animation: floatPixel5 2.3s infinite ease-out 0.3s;
 }
 
+/* ==========================================================================
+   Режим для слабовидящих (Accessible Large-Text Mode)
+   Заменяет абсолютно весь мелкий шрифт на увеличенный и легкочитаемый
+   ========================================================================== */
+
+/* 1. Все мелкие шрифты (8px - 13px) и text-xs принудительно увеличиваются до комфортного размера */
+.accessible-mode .text-\[7px\],
+.accessible-mode .text-\[8px\],
+.accessible-mode .text-\[9px\],
+.accessible-mode .text-\[10px\],
+.accessible-mode .text-\[11px\],
+.accessible-mode .text-\[12px\],
+.accessible-mode .text-\[13px\],
+.accessible-mode .text-xs {
+  font-size: 1.05rem !important; /* ~16.8px вместо 8-12px */
+  line-height: 1.55 !important;
+  font-weight: 600 !important;
+}
+
+/* 2. Мелкий шрифт text-sm (14px) увеличивается до ~18px */
+.accessible-mode .text-sm {
+  font-size: 1.15rem !important; /* ~18.4px */
+  line-height: 1.6 !important;
+}
+
+/* 3. Базовый текст text-base (16px) увеличивается до ~20px */
+.accessible-mode .text-base {
+  font-size: 1.25rem !important; /* ~20px */
+  line-height: 1.6 !important;
+}
+
+/* 4. Заголовки text-lg, text-xl */
+.accessible-mode .text-lg {
+  font-size: 1.4rem !important;
+  line-height: 1.5 !important;
+}
+
+.accessible-mode .text-xl {
+  font-size: 1.6rem !important;
+  line-height: 1.4 !important;
+}
+
+/* 5. Поля ввода, кнопки, выпадающие списки и таблицы */
+.accessible-mode input,
+.accessible-mode textarea,
+.accessible-mode select,
+.accessible-mode button {
+  font-size: 1.1rem !important;
+}
+
+/* 6. Повышенная контрастность и читаемость для слабовидящих */
+.accessible-mode {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.accessible-mode .opacity-50,
+.accessible-mode .opacity-60,
+.accessible-mode .opacity-70,
+.accessible-mode .text-purple-300\/60,
+.accessible-mode .text-purple-300\/70,
+.accessible-mode .text-purple-400\/50,
+.accessible-mode .text-\[\#ebd6f7\]\/60,
+.accessible-mode .text-\[\#ebd6f7\]\/70 {
+  opacity: 0.95 !important;
+  color: #f5edfc !important;
+}
+
+/* 7. Предотвращение слипания строк при крупном размере */
+.accessible-mode .leading-none,
+.accessible-mode .leading-tight {
+  line-height: 1.45 !important;
+}
+

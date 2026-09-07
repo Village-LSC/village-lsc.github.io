@@ -274,9 +274,11 @@ export function TotalComplexityCard({ calculated, sprite, lang }: TotalComplexit
                 </div>
                 <div className="flex justify-between items-center mt-2 px-0.5 gap-2">
                   <span className="shrink-0 text-white font-mono font-black text-xs bg-purple-950/80 px-2.5 py-0.5 rounded border border-purple-400/30 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">0</span>
-                  <span className="text-center font-sans font-bold text-xs sm:text-sm text-white leading-normal drop-shadow-[0_1.5px_3px_rgba(0,0,0,1)] max-w-[80%]">
-                    {desc}
-                  </span>
+                  {isImpossible && (
+                    <span className="text-center font-sans font-bold text-xs sm:text-sm text-red-200 leading-normal drop-shadow-[0_1.5px_3px_rgba(0,0,0,1)] max-w-[80%] animate-pulse">
+                      {desc}
+                    </span>
+                  )}
                   <span className="shrink-0 text-white font-mono font-black text-xs bg-purple-950/80 px-2.5 py-0.5 rounded border border-purple-400/30 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">100</span>
                 </div>
               </div>

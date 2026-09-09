@@ -20,6 +20,7 @@ import {
   Package,
   Trash2,
   Filter,
+  Search,
   X
 } from 'lucide-react';
 import { CALCULATOR_TEMPLATES, CalculatorTemplate } from '../data/templates';
@@ -59,6 +60,7 @@ export function TemplateCalculator({
   // Category filter state for template selector menu
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Cell size for template selector ('large' = 6 cells / full info, 'medium' = 8 cells / compact, 'small' = 12 cells / icon + title)
   type CellSize = 'small' | 'medium' | 'large';
@@ -89,6 +91,79 @@ export function TemplateCalculator({
     });
     return counts;
   }, []);
+
+  // Filtered templates based on category filter and search query
+  const filteredTemplates = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return CALCULATOR_TEMPLATES.filter((tmpl) => {
+      if (categoryFilter !== 'all' && tmpl.categoryId !== categoryFilter) {
+        return false;
+      }
+      if (!q) return true;
+
+      const cat = CATEGORIES_LIST.find((c) => c.id === tmpl.categoryId);
+      const catRu = cat ? cat.nameRu.toLowerCase() : '';
+      const catEn = cat ? cat.nameEn.toLowerCase() : '';
+      const titleRu = (tmpl.titleRu || '').toLowerCase();
+      const titleEn = (tmpl.titleEn || '').toLowerCase();
+      const descRu = (tmpl.descRu || '').toLowerCase();
+      const descEn = (tmpl.descEn || '').toLowerCase();
+      const badgeRu = (tmpl.badgeRu || '').toLowerCase();
+      const badgeEn = (tmpl.badgeEn || '').toLowerCase();
+      const sizeStr = `${tmpl.defaultWidth}x${tmpl.defaultHeight}`.toLowerCase();
+      const sizeStrRu = `${tmpl.defaultWidth}х${tmpl.defaultHeight}`.toLowerCase();
+
+      return (
+        titleRu.includes(q) ||
+        titleEn.includes(q) ||
+        descRu.includes(q) ||
+        descEn.includes(q) ||
+        badgeRu.includes(q) ||
+        badgeEn.includes(q) ||
+        catRu.includes(q) ||
+        catEn.includes(q) ||
+        sizeStr.includes(q) ||
+        sizeStrRu.includes(q) ||
+        tmpl.id.toLowerCase().includes(q)
+      );
+    });
+  }, [categoryFilter, searchQuery]);
+
+  // Pre-calculate counts of templates matching search query per category
+  const searchMatchingCounts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null;
+    const counts: Record<string, number> = {};
+    CATEGORIES_LIST.forEach((cat) => {
+      counts[cat.id] = CALCULATOR_TEMPLATES.filter((t) => {
+        if (t.categoryId !== cat.id) return false;
+        const catRu = cat.nameRu.toLowerCase();
+        const catEn = cat.nameEn.toLowerCase();
+        const titleRu = (t.titleRu || '').toLowerCase();
+        const titleEn = (t.titleEn || '').toLowerCase();
+        const descRu = (t.descRu || '').toLowerCase();
+        const descEn = (t.descEn || '').toLowerCase();
+        const badgeRu = (t.badgeRu || '').toLowerCase();
+        const badgeEn = (t.badgeEn || '').toLowerCase();
+        const sizeStr = `${t.defaultWidth}x${t.defaultHeight}`.toLowerCase();
+        const sizeStrRu = `${t.defaultWidth}х${t.defaultHeight}`.toLowerCase();
+        return (
+          titleRu.includes(q) ||
+          titleEn.includes(q) ||
+          descRu.includes(q) ||
+          descEn.includes(q) ||
+          badgeRu.includes(q) ||
+          badgeEn.includes(q) ||
+          catRu.includes(q) ||
+          catEn.includes(q) ||
+          sizeStr.includes(q) ||
+          sizeStrRu.includes(q) ||
+          t.id.toLowerCase().includes(q)
+        );
+      }).length;
+    });
+    return counts;
+  }, [searchQuery]);
 
   // Track collapsed/expanded state of cards
   const [expandedCards, setExpandedCards] = useState<{ [key: number]: boolean }>({
@@ -384,8 +459,8 @@ export function TemplateCalculator({
                               {/* Configurable Category Filter & Size Toolbar */}
                               <div className="bg-[#180727] p-3.5 sm:p-4 rounded-xl border border-[#3d1a56] space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div className="flex flex-wrap items-center gap-2.5">
-                                    <div className="flex items-center gap-2 text-sm font-mono font-bold text-purple-200">
+                                  <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+                                    <div className="flex items-center gap-2 text-sm font-mono font-bold text-purple-200 shrink-0">
                                       <Filter className="w-4 h-4 text-purple-400" />
                                       <span>{lang === 'ru' ? 'Категория:' : 'Category:'}</span>
                                     </div>
@@ -394,7 +469,7 @@ export function TemplateCalculator({
                                     <button
                                       type="button"
                                       onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
-                                      className={`px-4 py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold transition-all flex items-center gap-2.5 cursor-pointer shadow-md ${
+                                      className={`px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold transition-all flex items-center gap-2.5 cursor-pointer shadow-md shrink-0 ${
                                         isCategoryDropdownOpen
                                           ? 'bg-purple-600 text-white border-purple-300 ring-2 ring-purple-400/50'
                                           : categoryFilter !== 'all'
@@ -427,13 +502,35 @@ export function TemplateCalculator({
                                           setCategoryFilter('all');
                                           setIsCategoryDropdownOpen(false);
                                         }}
-                                        className="px-3 py-2.5 rounded-xl bg-red-950/60 hover:bg-red-900/80 border border-red-500/60 text-red-200 text-xs sm:text-sm font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                        className="px-3 py-2 rounded-xl bg-red-950/60 hover:bg-red-900/80 border border-red-500/60 text-red-200 text-xs sm:text-sm font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0"
                                         title={lang === 'ru' ? 'Сбросить фильтр на все категории' : 'Reset filter to all categories'}
                                       >
                                         <X className="w-3.5 h-3.5" />
                                         <span>{lang === 'ru' ? 'Все' : 'All'}</span>
                                       </button>
                                     )}
+
+                                    {/* Search by Name in Toolbar */}
+                                    <div className="relative flex-1 min-w-[200px] max-w-sm">
+                                      <Search className="w-4 h-4 text-purple-400/70 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                      <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder={lang === 'ru' ? 'Поиск по названию...' : 'Search by name...'}
+                                        className="w-full bg-[#0e0317] text-purple-100 placeholder-purple-400/40 text-xs sm:text-sm font-mono rounded-xl pl-9 pr-8 py-2 sm:py-2.5 border border-[#4d236b] focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400/50 transition-all"
+                                      />
+                                      {searchQuery && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSearchQuery('')}
+                                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-purple-400 hover:text-white cursor-pointer p-0.5 rounded hover:bg-purple-900/50 transition-colors"
+                                          title={lang === 'ru' ? 'Очистить поиск' : 'Clear search'}
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
 
                                   <div className="flex flex-wrap items-center gap-3">
@@ -485,9 +582,7 @@ export function TemplateCalculator({
                                     <div className="text-xs sm:text-sm font-mono text-purple-200 flex items-center gap-1.5 bg-[#0e0317] px-3 py-2 rounded-xl border border-[#3d1a56]">
                                       <span className="hidden md:inline">{lang === 'ru' ? 'Найдено:' : 'Found:'}</span>
                                       <span className="font-bold text-white px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/40">
-                                        {CALCULATOR_TEMPLATES.filter(
-                                          (tmpl) => categoryFilter === 'all' || tmpl.categoryId === categoryFilter
-                                        ).length}
+                                        {filteredTemplates.length}
                                       </span>
                                     </div>
                                   </div>
@@ -504,19 +599,45 @@ export function TemplateCalculator({
                                       className="overflow-hidden pt-1"
                                     >
                                       <div className="p-3.5 sm:p-4 bg-[#0d0214] rounded-xl border border-purple-500/50 space-y-3">
-                                        <div className="text-xs sm:text-sm font-mono text-stone-300 flex items-center justify-between">
-                                          <span className="font-semibold text-purple-200">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                          <span className="font-semibold text-purple-200 text-xs sm:text-sm font-mono">
                                             {lang === 'ru'
-                                              ? 'Выберите категорию для фильтрации шаблонов:'
-                                              : 'Select a category to filter templates:'}
+                                              ? 'Выберите категорию или введите название для поиска:'
+                                              : 'Select a category or search by name:'}
                                           </span>
                                           <button
                                             type="button"
                                             onClick={() => setIsCategoryDropdownOpen(false)}
-                                            className="text-purple-300 hover:text-white cursor-pointer text-xs sm:text-sm font-semibold px-2.5 py-1 rounded bg-purple-950/60 border border-purple-500/30"
+                                            className="self-start sm:self-auto text-purple-300 hover:text-white cursor-pointer text-xs sm:text-sm font-semibold px-2.5 py-1 rounded bg-purple-950/60 border border-purple-500/30 transition-colors"
                                           >
                                             {lang === 'ru' ? 'Свернуть' : 'Collapse'}
                                           </button>
+                                        </div>
+
+                                        {/* Search Input inside the dropdown filter panel */}
+                                        <div className="relative">
+                                          <Search className="w-4 h-4 text-purple-400/70 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                          <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder={
+                                              lang === 'ru'
+                                                ? 'Поиск шаблона по названию (например: меч, скин, hd, 64x64)...'
+                                                : 'Search template by name (e.g. sword, skin, hd, 64x64)...'
+                                            }
+                                            className="w-full bg-[#180727] text-purple-100 placeholder-purple-400/50 text-xs sm:text-sm font-mono rounded-xl pl-10 pr-9 py-2.5 border border-[#4d236b] focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/30 transition-all"
+                                          />
+                                          {searchQuery && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setSearchQuery('')}
+                                              className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-400 hover:text-white cursor-pointer p-1 rounded hover:bg-purple-900/50 transition-colors"
+                                              title={lang === 'ru' ? 'Очистить' : 'Clear'}
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
                                         </div>
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs sm:text-sm font-mono">
@@ -535,14 +656,15 @@ export function TemplateCalculator({
                                           >
                                             <span className="font-bold">{lang === 'ru' ? '✨ Все категории' : '✨ All categories'}</span>
                                             <span className="text-xs font-bold px-2.5 py-1 rounded bg-black/40 text-purple-200">
-                                              {CALCULATOR_TEMPLATES.length}
+                                              {searchQuery.trim() ? filteredTemplates.length : CALCULATOR_TEMPLATES.length}
                                             </span>
                                           </button>
 
                                           {/* Categories 1 to 8 */}
                                           {CATEGORIES_LIST.map((cat) => {
                                             const isCatActive = categoryFilter === cat.id;
-                                            const count = categoryCounts[cat.id] || 0;
+                                            const totalCount = categoryCounts[cat.id] || 0;
+                                            const matchCount = searchMatchingCounts ? (searchMatchingCounts[cat.id] || 0) : totalCount;
                                             return (
                                               <button
                                                 key={cat.id}
@@ -555,7 +677,7 @@ export function TemplateCalculator({
                                                   isCatActive
                                                     ? 'bg-purple-600 text-white border-purple-300 font-bold shadow-md ring-1 ring-purple-300'
                                                     : 'bg-[#180727] text-stone-300 hover:text-white border-[#3d1a56] hover:bg-[#250d3a]'
-                                                }`}
+                                                } ${searchMatchingCounts && matchCount === 0 ? 'opacity-40 hover:opacity-90' : ''}`}
                                               >
                                                 <div className="truncate pr-2">
                                                   <span className="opacity-70 mr-1.5 font-bold">{cat.id}.</span>
@@ -563,14 +685,14 @@ export function TemplateCalculator({
                                                 </div>
                                                 <span
                                                   className={`text-xs font-bold px-2 py-0.5 rounded shrink-0 ${
-                                                    count > 0
+                                                    matchCount > 0
                                                       ? isCatActive
                                                         ? 'bg-black/40 text-white'
                                                         : 'bg-purple-900/60 text-purple-200'
                                                       : 'bg-black/30 text-stone-500'
                                                   }`}
                                                 >
-                                                  {count}
+                                                  {searchMatchingCounts ? `${matchCount}` : totalCount}
                                                 </span>
                                               </button>
                                             );
@@ -592,9 +714,7 @@ export function TemplateCalculator({
                                     : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5'
                                 }`}
                               >
-                                {CALCULATOR_TEMPLATES.filter(
-                                  (tmpl) => categoryFilter === 'all' || tmpl.categoryId === categoryFilter
-                                ).map((tmpl) => {
+                                {filteredTemplates.map((tmpl) => {
                                   const isSelected = tmpl.id === item.templateId;
                                   const cleanTitle = cleanTemplateTitle(lang === 'ru' ? tmpl.titleRu : tmpl.titleEn);
 
@@ -822,13 +942,43 @@ export function TemplateCalculator({
                                   );
                                 })}
 
-                                {CALCULATOR_TEMPLATES.filter(
-                                  (tmpl) => categoryFilter === 'all' || tmpl.categoryId === categoryFilter
-                                ).length === 0 && (
-                                  <div className="col-span-full py-8 text-center text-[#ebd6f7]/60 text-xs font-mono bg-[#180727]/60 rounded-xl border border-dashed border-[#3d1a56]">
-                                    {lang === 'ru'
-                                      ? 'В данной категории пока нет шаблонов. Вы можете легко добавить их в файле templates.json!'
-                                      : 'No templates in this category yet. You can add them in templates.json!'}
+                                {filteredTemplates.length === 0 && (
+                                  <div className="col-span-full py-10 px-4 text-center bg-[#0d0214]/80 rounded-xl border border-dashed border-purple-500/40 space-y-3">
+                                    <Search className="w-8 h-8 text-purple-400/40 mx-auto" />
+                                    <div className="text-sm font-mono font-bold text-purple-200">
+                                      {searchQuery.trim()
+                                        ? (lang === 'ru' ? `По запросу «${searchQuery}» ничего не найдено` : `No templates found matching "${searchQuery}"`)
+                                        : (lang === 'ru' ? 'В данной категории пока нет шаблонов.' : 'No templates in this category yet.')}
+                                    </div>
+                                    <div className="text-xs font-mono text-purple-300/60 max-w-md mx-auto">
+                                      {searchQuery.trim()
+                                        ? (lang === 'ru'
+                                            ? 'Попробуйте изменить поисковый запрос или сбросить фильтр категории.'
+                                            : 'Try changing your search query or resetting the category filter.')
+                                        : (lang === 'ru'
+                                            ? 'Вы можете добавить шаблоны в templates.json или выбрать другую категорию.'
+                                            : 'You can choose another category or add templates in templates.json.')}
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                                      {searchQuery.trim() && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSearchQuery('')}
+                                          className="px-3.5 py-1.5 rounded-lg bg-purple-900/70 hover:bg-purple-800 text-purple-100 text-xs font-mono font-bold border border-purple-500/50 cursor-pointer transition-colors"
+                                        >
+                                          {lang === 'ru' ? 'Очистить поиск' : 'Clear search'}
+                                        </button>
+                                      )}
+                                      {categoryFilter !== 'all' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setCategoryFilter('all')}
+                                          className="px-3.5 py-1.5 rounded-lg bg-[#250d3a] hover:bg-[#32114e] text-purple-200 text-xs font-mono font-bold border border-[#4d236b] cursor-pointer transition-colors"
+                                        >
+                                          {lang === 'ru' ? 'Сбросить категорию на «Все»' : 'Reset category to "All"'}
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </div>

@@ -1297,7 +1297,7 @@ export default function App() {
             ? 'moderate'
             : 'simple',
         animComplexity: tmpl.defaultAnimComplexity || 'simple',
-        designMode: 'scratch',
+        designMode: 'reference',
         styleMode: 'free',
         priceMode: 'auto',
         manualPrice: 0,
@@ -1372,7 +1372,7 @@ export default function App() {
             ? 'moderate'
             : 'simple',
         animComplexity: tmpl.defaultAnimComplexity || 'simple',
-        designMode: 'scratch',
+        designMode: 'reference',
         styleMode: 'free',
         priceMode: 'auto',
         manualPrice: 0,

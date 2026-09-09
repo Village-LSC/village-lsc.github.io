@@ -1185,8 +1185,9 @@ export default function App() {
   const [templateItems, setTemplateItems] = useState<TemplateItemState[]>([
     {
       id: 1,
-      templateId: 'rpg_items',
-      count: 5,
+      templateId: CALCULATOR_TEMPLATES[0]?.id || 'item_16',
+      count: CALCULATOR_TEMPLATES[0]?.defaultCountOrig || 1,
+      countVar: CALCULATOR_TEMPLATES[0]?.defaultCountVar || 0,
       hasAnimation: false,
       animDesc: '',
       animDuration: 1.0,
@@ -1196,12 +1197,22 @@ export default function App() {
   ]);
 
   const handleAddTemplateItem = () => {
-    const defaultTmpl = CALCULATOR_TEMPLATES[0];
+    const defaultTmpl = CALCULATOR_TEMPLATES[0] || {
+      id: 'item_16',
+      defaultCountOrig: 1,
+      defaultCountVar: 0,
+      hasAnimation: false,
+      defaultAnimDescRu: '',
+      defaultAnimDescEn: '',
+      defaultDuration: 1.0,
+      defaultQuality: 'optimal' as const,
+    };
     const newId = Date.now();
     const newItem: TemplateItemState = {
       id: newId,
       templateId: defaultTmpl.id,
       count: defaultTmpl.defaultCountOrig || 1,
+      countVar: defaultTmpl.defaultCountVar || 0,
       hasAnimation: defaultTmpl.hasAnimation || false,
       animDesc: lang === 'ru' ? defaultTmpl.defaultAnimDescRu : defaultTmpl.defaultAnimDescEn,
       animDuration: defaultTmpl.defaultDuration || 1.0,
@@ -1239,6 +1250,7 @@ export default function App() {
               ...item,
               templateId: tmpl.id,
               count: tmpl.defaultCountOrig || item.count,
+              countVar: tmpl.defaultCountVar ?? item.countVar ?? 0,
               hasAnimation: tmpl.hasAnimation,
               animDuration: tmpl.defaultDuration || 1.0,
               animDesc: lang === 'ru' ? tmpl.defaultAnimDescRu : tmpl.defaultAnimDescEn,
@@ -1264,7 +1276,7 @@ export default function App() {
         height: tmpl.defaultHeight,
         skinType: tmpl.categoryId === '7' && (tmpl.defaultWidth >= 128 || tmpl.defaultHeight >= 128) ? '2' : '1',
         countOrig: item.count,
-        countVar: 0,
+        countVar: item.countVar || 0,
         hasAnimation: item.hasAnimation,
         frameMode: 'direct',
         framesDirect: item.hasAnimation
@@ -1339,7 +1351,7 @@ export default function App() {
         height: tmpl.defaultHeight,
         skinType: tmpl.categoryId === '7' && (tmpl.defaultWidth >= 128 || tmpl.defaultHeight >= 128) ? '2' : '1',
         countOrig: item.count,
-        countVar: 0,
+        countVar: item.countVar || 0,
         hasAnimation: item.hasAnimation,
         frameMode: 'direct',
         framesDirect: item.hasAnimation
@@ -1401,7 +1413,7 @@ export default function App() {
       height: tmpl.defaultHeight,
       skinType: tmpl.categoryId === '7' && (tmpl.defaultWidth >= 128 || tmpl.defaultHeight >= 128) ? '2' : '1',
       countOrig: item.count,
-      countVar: 0,
+      countVar: item.countVar || 0,
       hasAnimation: item.hasAnimation,
       frameMode: 'direct',
       framesDirect: item.hasAnimation

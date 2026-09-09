@@ -189,6 +189,7 @@ export interface TemplateItemState {
   id: number;
   templateId: string;
   count: number;
+  countVar?: number;
   hasAnimation: boolean;
   animDesc: string;
   animDuration: number;

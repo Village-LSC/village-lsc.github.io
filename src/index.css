@@ -1,195 +1,135 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700&family=Martian+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Geologica", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geologica", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-/* Custom retro custom scrollbars */
+:root {
+  --ui-bg: #07020e;
+  --ui-header: #0d0418;
+  --ui-deep: #10051c;
+  --ui-checker-a: #120620;
+  --ui-checker-b: #190a2b;
+  --ui-surface-alt: #140724;
+  --ui-card: #190a29;
+  --ui-card-hover: #210e36;
+  --ui-price-bg: #220e38;
+  --ui-border: #2c1347;
+  --ui-border-strong: #431d6b;
+  --ui-accent: #a674de;
+  --ui-accent-soft: #c29ced;
+  --ui-accent-bright: #d8bff5;
+  --ui-btn-bg: #5b2a8c;
+  --ui-btn-hover: #6f35ab;
+  --ui-btn-text: #fbf7ff;
+  --ui-text: #dfcaf2;
+  --ui-text-bright: #eee2fa;
+  --ui-text-muted: #a88ec4;
+  --ui-glow-rgb: 166, 116, 222;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+  background-color: var(--ui-bg);
+}
+
+/* Custom cosmic dark scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f0ea;
+  background: var(--ui-bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: #8c786c;
+  background: var(--ui-border-strong);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #6f5d52;
+  background: var(--ui-accent);
 }
 
-/* Retro styling classes */
-.pixel-border {
-  border: 4px solid #4e3629;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.pixel-shadow {
-  box-shadow: 4px 4px 0px 0px #4e3629;
+/* Crisp pixel-art rendering */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
-.pixel-shadow-sm {
-  box-shadow: 2px 2px 0px 0px #4e3629;
+/* Transparency checkerboard backdrop for pixel sprite inspection */
+.pixel-checkerboard {
+  background-color: var(--ui-checker-a);
+  background-image:
+    linear-gradient(45deg, var(--ui-checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--ui-checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--ui-checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--ui-checker-b) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
-.pixel-btn-hover:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0px 0px #4e3629;
+.pixel-checkerboard-light {
+  background-color: #ebe6f2;
+  background-image:
+    linear-gradient(45deg, #d7cfe3 25%, transparent 25%),
+    linear-gradient(-45deg, #d7cfe3 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d7cfe3 75%),
+    linear-gradient(-45deg, transparent 75%, #d7cfe3 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
-.pixel-btn-active:active {
-  transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0px 0px #4e3629;
+/* Filmstrip sprocket hole strips */
+.film-sprockets {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 8px,
+    rgba(var(--ui-glow-rgb), 0.24) 8px,
+    rgba(var(--ui-glow-rgb), 0.24) 16px,
+    transparent 16px,
+    transparent 24px
+  );
+  background-size: 24px 6px;
+  background-repeat: repeat-x;
+  background-position: center;
 }
 
-@media print {
-  body * {
-    visibility: hidden;
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
-  #visual-tz-document, #visual-tz-document * {
-    visibility: visible;
+}
+
+/* Hovered elements illuminate and cast light onto nearby cosmic nebulae */
+[data-nebula-light] {
+  transition:
+    border-color 250ms ease,
+    box-shadow 250ms ease,
+    background-color 250ms ease,
+    color 200ms ease,
+    filter 200ms ease,
+    transform 180ms ease;
+}
+
+@media (hover: hover) {
+  [data-nebula-light]:hover:not(:has([data-nebula-light]:hover)) {
+    border-color: rgba(var(--ui-glow-rgb), 0.68);
+    box-shadow:
+      0 0 26px rgba(var(--ui-glow-rgb), 0.24),
+      0 0 10px rgba(var(--ui-glow-rgb), 0.14),
+      inset 0 0 16px rgba(var(--ui-glow-rgb), 0.06);
   }
-  #visual-tz-document .no-export, .no-export {
-    display: none !important;
-    visibility: hidden !important;
-  }
-  #visual-tz-document {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 24px;
-    background: #150624 !important;
-    color: #ebd6f7 !important;
-    border: none !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-}
-
-/* Pixel floating animations for Advanced complexity level button */
-@keyframes floatPixel1 {
-  0% { transform: translateY(0) scale(0.6) rotate(0deg); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translateY(-35px) scale(1) rotate(45deg); opacity: 0; }
-}
-@keyframes floatPixel2 {
-  0% { transform: translateY(0) scale(0.8) rotate(0deg); opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { transform: translateY(-40px) scale(0.5) rotate(-30deg); opacity: 0; }
-}
-@keyframes floatPixel3 {
-  0% { transform: translateY(0) scale(0.5) rotate(0deg); opacity: 0; }
-  5% { opacity: 1; }
-  95% { opacity: 1; }
-  100% { transform: translateY(-45px) scale(1.2) rotate(90deg); opacity: 0; }
-}
-@keyframes floatPixel4 {
-  0% { transform: translateY(0) scale(0.7) rotate(0deg); opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { transform: translateY(-38px) scale(0.6) rotate(15deg); opacity: 0; }
-}
-@keyframes floatPixel5 {
-  0% { transform: translateY(0) scale(0.9) rotate(0deg); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translateY(-42px) scale(0.7) rotate(-45deg); opacity: 0; }
-}
-
-.animate-pixel-1 {
-  animation: floatPixel1 2.2s infinite ease-out;
-}
-.animate-pixel-2 {
-  animation: floatPixel2 1.8s infinite ease-out 0.4s;
-}
-.animate-pixel-3 {
-  animation: floatPixel3 2.5s infinite ease-out 0.1s;
-}
-.animate-pixel-4 {
-  animation: floatPixel4 2.0s infinite ease-out 0.7s;
-}
-.animate-pixel-5 {
-  animation: floatPixel5 2.3s infinite ease-out 0.3s;
-}
-
-/* ==========================================================================
-   Режим для слабовидящих (Accessible Large-Text Mode)
-   Заменяет абсолютно весь мелкий шрифт на увеличенный и легкочитаемый
-   ========================================================================== */
-
-/* 1. Все мелкие шрифты (8px - 13px) и text-xs принудительно увеличиваются до комфортного размера */
-.accessible-mode .text-\[7px\],
-.accessible-mode .text-\[8px\],
-.accessible-mode .text-\[9px\],
-.accessible-mode .text-\[10px\],
-.accessible-mode .text-\[11px\],
-.accessible-mode .text-\[12px\],
-.accessible-mode .text-\[13px\],
-.accessible-mode .text-xs {
-  font-size: 1.05rem !important; /* ~16.8px вместо 8-12px */
-  line-height: 1.55 !important;
-  font-weight: 600 !important;
-}
-
-/* 2. Мелкий шрифт text-sm (14px) увеличивается до ~18px */
-.accessible-mode .text-sm {
-  font-size: 1.15rem !important; /* ~18.4px */
-  line-height: 1.6 !important;
-}
-
-/* 3. Базовый текст text-base (16px) увеличивается до ~20px */
-.accessible-mode .text-base {
-  font-size: 1.25rem !important; /* ~20px */
-  line-height: 1.6 !important;
-}
-
-/* 4. Заголовки text-lg, text-xl */
-.accessible-mode .text-lg {
-  font-size: 1.4rem !important;
-  line-height: 1.5 !important;
-}
-
-.accessible-mode .text-xl {
-  font-size: 1.6rem !important;
-  line-height: 1.4 !important;
-}
-
-/* 5. Поля ввода, кнопки, выпадающие списки и таблицы */
-.accessible-mode input,
-.accessible-mode textarea,
-.accessible-mode select,
-.accessible-mode button {
-  font-size: 1.1rem !important;
-}
-
-/* 6. Повышенная контрастность и читаемость для слабовидящих */
-.accessible-mode {
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
-.accessible-mode .opacity-50,
-.accessible-mode .opacity-60,
-.accessible-mode .opacity-70,
-.accessible-mode .text-purple-300\/60,
-.accessible-mode .text-purple-300\/70,
-.accessible-mode .text-purple-400\/50,
-.accessible-mode .text-\[\#ebd6f7\]\/60,
-.accessible-mode .text-\[\#ebd6f7\]\/70 {
-  opacity: 0.95 !important;
-  color: #f5edfc !important;
-}
-
-/* 7. Предотвращение слипания строк при крупном размере */
-.accessible-mode .leading-none,
-.accessible-mode .leading-tight {
-  line-height: 1.45 !important;
 }
 

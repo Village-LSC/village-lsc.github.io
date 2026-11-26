@@ -42,15 +42,21 @@ export interface SocialLinkItem {
 }
 
 export interface PaymentMethod {
-  id: string;
+  id: 'card-sbp' | 'crypto' | 'boosty';
   titleRu: string;
   titleEn: string;
   subtitleRu: string;
   subtitleEn: string;
-  tag: string;
+  detailLabelRu: string;
+  detailLabelEn: string;
+  value: string;
+  href?: string;
+  copyText: string;
+  noteRu?: string;
+  noteEn?: string;
 }
 
-export const DEFAULT_USD_RATE = 92;
+export const DEFAULT_USD_RATE = 82;
 
 export const SOCIAL_LINKS: SocialLinkItem[] = [
   {
@@ -95,28 +101,29 @@ export const SOCIAL_LINKS: SocialLinkItem[] = [
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
   {
-    id: 'card',
-    titleRu: 'Карта',
-    titleEn: 'Bank Card',
-    subtitleRu: 'Перевод на банковскую карту после согласования заказа.',
-    subtitleEn: 'Direct bank card transfer after order confirmation.',
-    tag: 'RUB',
-  },
-  {
-    id: 'sbp',
-    titleRu: 'СБП',
-    titleEn: 'SBP (Fast Payment)',
-    subtitleRu: 'Мгновенный перевод по номеру телефона без комиссий.',
-    subtitleEn: 'Instant Russian Faster Payments System transfer.',
-    tag: 'RUB',
+    id: 'card-sbp',
+    titleRu: 'Карта / СБП',
+    titleEn: 'Card / SBP',
+    subtitleRu: 'Быстрая оплата картой или через СБП по платёжной ссылке Сбербанка.',
+    subtitleEn: 'Fast payment by bank card or SBP via the Sberbank payment link.',
+    detailLabelRu: 'Ссылка на оплату',
+    detailLabelEn: 'Payment link',
+    value: 'https://www.sberbank.ru/ru/choise_bank?requisiteNumber=79198974087&bankCode=100000000111',
+    href: 'https://www.sberbank.ru/ru/choise_bank?requisiteNumber=79198974087&bankCode=100000000111',
+    copyText: 'https://www.sberbank.ru/ru/choise_bank?requisiteNumber=79198974087&bankCode=100000000111',
   },
   {
     id: 'crypto',
     titleRu: 'Крипта',
     titleEn: 'Crypto',
-    subtitleRu: 'Перевод в USDT / TON и других популярных монетах.',
-    subtitleEn: 'USDT / TON and other major cryptocurrencies.',
-    tag: 'USDT / TON',
+    subtitleRu: 'Перевод в стейблкоине USDT через сеть TON.',
+    subtitleEn: 'Transfer in USDT via the TON network.',
+    detailLabelRu: 'Кошелёк USDT (TON)',
+    detailLabelEn: 'USDT (TON) Wallet',
+    value: 'UQCDK944xuH6IQNC098A1NnXr0Ou1Q5jCN-JbbsJW8FDg05Z',
+    copyText: 'UQCDK944xuH6IQNC098A1NnXr0Ou1Q5jCN-JbbsJW8FDg05Z',
+    noteRu: 'Перед отправкой убедитесь, что выбрана сеть TON.',
+    noteEn: 'Make sure the TON network is selected before sending.',
   },
   {
     id: 'boosty',
@@ -124,7 +131,11 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     titleEn: 'Boosty',
     subtitleRu: 'Оплата через сервис Boosty (включая зарубежные карты).',
     subtitleEn: 'Payment via Boosty (supports international cards).',
-    tag: 'RUB / USD',
+    detailLabelRu: 'Страница Boosty',
+    detailLabelEn: 'Boosty page',
+    value: 'https://boosty.to/village_lsc',
+    href: 'https://boosty.to/village_lsc',
+    copyText: 'https://boosty.to/village_lsc',
   },
 ];
 
@@ -275,7 +286,11 @@ export function formatPriceValue(
 ): string {
   const locale = lang === 'ru' ? 'ru-RU' : 'en-US';
   if (currency === 'usd') {
-    const usd = Math.max(1, Math.round((rubAmount / usdRate) * 2) / 2);
+    const rawUsd = rubAmount / usdRate;
+    const usd =
+      rawUsd < 10
+        ? Math.max(1, Math.round(rawUsd * 2) / 2)
+        : Math.max(1, Math.round(rawUsd));
     return `$${usd.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
   }
   return `${Math.round(rubAmount).toLocaleString(locale)} ₽`;
@@ -308,6 +323,13 @@ export function formatCategoryMinAmount(
 
   const lowFormatted = formatPriceValue(range.low, currency, lang, usdRate);
   const highFormatted = formatPriceValue(range.high, currency, lang, usdRate);
+
+  if (currency === 'usd') {
+    return lang === 'ru'
+      ? `от ${lowFormatted} до ${highFormatted}`
+      : `${lowFormatted} – ${highFormatted}`;
+  }
+
   return lang === 'ru'
     ? `от ${lowFormatted.replace(' ₽', '')} до ${highFormatted}`
     : `${lowFormatted} – ${highFormatted}`;

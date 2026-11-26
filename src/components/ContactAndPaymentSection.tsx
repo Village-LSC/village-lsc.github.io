@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Copy, Check, ExternalLink, CreditCard, Coins } from 'lucide-react';
 import {
   Language,
   PAYMENT_METHODS,
+  PaymentMethod,
   SOCIAL_LINKS,
 } from '../data/portfolioData';
 import { SocialIcon } from './SocialIcons';
@@ -13,6 +15,9 @@ interface ContactAndPaymentSectionProps {
 
 export function ContactAndPaymentSection({ lang }: ContactAndPaymentSectionProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activePaymentId, setActivePaymentId] = useState<PaymentMethod['id']>('card-sbp');
+  const activePayment =
+    PAYMENT_METHODS.find((method) => method.id === activePaymentId) ?? PAYMENT_METHODS[0];
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -116,35 +121,161 @@ export function ContactAndPaymentSection({ lang }: ContactAndPaymentSectionProps
           </div>
         </div>
 
-        {/* How to Pay (Card, SBP, Crypto, Boosty) */}
+        {/* How to Pay — Dynamic Interactive Payment Menu */}
         <div
           data-nebula-light="true"
           className="rounded-2xl border-2 border-[var(--ui-border)] bg-[var(--ui-card)]/95 p-5 sm:p-7 space-y-5 shadow-[0_14px_40px_rgba(0,0,0,0.55)]"
         >
-          <h2 className="font-display text-xl sm:text-2xl font-bold text-[#fbf7ff]">
-            {lang === 'ru' ? 'Как можно оплатить' : 'Payment Methods'}
-          </h2>
-
-          <div className="divide-y divide-[var(--ui-border)]/70">
-            {PAYMENT_METHODS.map((method) => (
-              <div
-                key={method.id}
-                className="py-3.5 sm:py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 sm:gap-4"
-              >
-                <div className="space-y-0.5">
-                  <div className="text-base sm:text-[17px] font-bold text-white">
-                    {lang === 'ru' ? method.titleRu : method.titleEn}
-                  </div>
-                  <p className="text-sm text-[var(--ui-text)]/85">
-                    {lang === 'ru' ? method.subtitleRu : method.subtitleEn}
-                  </p>
-                </div>
-                <span className="self-start sm:self-center font-mono text-xs font-semibold text-[var(--ui-accent-bright)] bg-[var(--ui-deep)] border border-[var(--ui-border-strong)] rounded-lg px-2.5 py-1 shrink-0 whitespace-nowrap tabular-nums">
-                  {method.tag}
-                </span>
-              </div>
-            ))}
+          <div className="space-y-1.5">
+            <h2 className="font-display text-xl sm:text-2xl font-bold text-[#fbf7ff]">
+              {lang === 'ru' ? 'Как можно оплатить' : 'Payment Methods'}
+            </h2>
+            <p className="text-sm sm:text-base text-[var(--ui-text)]/85 leading-relaxed">
+              {lang === 'ru'
+                ? 'Выберите способ оплаты, чтобы открыть ссылку или реквизиты.'
+                : 'Select a payment method to view the payment link or wallet details.'}
+            </p>
           </div>
+
+          {/* Interactive Method Tabs */}
+          <div
+            role="tablist"
+            aria-label={lang === 'ru' ? 'Способы оплаты' : 'Payment methods'}
+            className="grid grid-cols-3 gap-1.5 p-1.5 rounded-xl border border-[var(--ui-border-strong)] bg-[var(--ui-deep)]/90"
+          >
+            {PAYMENT_METHODS.map((method) => {
+              const isActive = method.id === activePayment.id;
+              return (
+                <button
+                  key={method.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActivePaymentId(method.id)}
+                  className={`relative flex items-center justify-center gap-2 px-2.5 sm:px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none ${
+                    isActive
+                      ? 'text-white'
+                      : 'text-[var(--ui-text)] hover:text-white hover:bg-[var(--ui-surface-alt)]/55'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="activePaymentTabBg"
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-0 rounded-lg bg-[var(--ui-card-hover)] border border-[var(--ui-accent)]/60 shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-2">
+                    {method.id === 'card-sbp' && (
+                      <CreditCard className="w-4 h-4 text-[var(--ui-accent-bright)] shrink-0" />
+                    )}
+                    {method.id === 'crypto' && (
+                      <Coins className="w-4 h-4 text-[var(--ui-accent-bright)] shrink-0" />
+                    )}
+                    {method.id === 'boosty' && (
+                      <SocialIcon
+                        id="boosty"
+                        className="w-4 h-4 text-[var(--ui-accent-bright)] shrink-0"
+                      />
+                    )}
+                    <span>{lang === 'ru' ? method.titleRu : method.titleEn}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Dynamic Payment Method Content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activePayment.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              className="rounded-xl border border-[var(--ui-border-strong)] bg-[var(--ui-surface-alt)]/80 p-4 sm:p-5 space-y-4"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-display text-lg sm:text-xl font-bold text-white">
+                    {lang === 'ru' ? activePayment.titleRu : activePayment.titleEn}
+                  </h3>
+                  <span className="font-mono text-xs font-medium text-[var(--ui-accent-soft)] shrink-0">
+                    {lang === 'ru' ? activePayment.detailLabelRu : activePayment.detailLabelEn}
+                  </span>
+                </div>
+                <p className="text-sm sm:text-[15px] text-[var(--ui-text)] leading-relaxed">
+                  {lang === 'ru' ? activePayment.subtitleRu : activePayment.subtitleEn}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-deep)]/95 px-3.5 py-3">
+                <code className="block font-mono text-xs sm:text-sm text-[var(--ui-accent-soft)] break-all select-all leading-relaxed">
+                  {activePayment.value}
+                </code>
+              </div>
+
+              {activePayment.noteRu && (
+                <p className="text-xs sm:text-sm text-[#f4d35e] font-medium">
+                  {lang === 'ru' ? activePayment.noteRu : activePayment.noteEn}
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {activePayment.href && (
+                  <a
+                    href={activePayment.href}
+                    data-nebula-light="true"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[var(--ui-accent)]/45 bg-[var(--ui-btn-bg)] hover:bg-[var(--ui-btn-hover)] text-[var(--ui-btn-text)] text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap"
+                  >
+                    <span>
+                      {activePayment.id === 'card-sbp'
+                        ? lang === 'ru'
+                          ? 'Перейти к оплате'
+                          : 'Proceed to payment'
+                        : lang === 'ru'
+                          ? 'Открыть Boosty'
+                          : 'Open Boosty'}
+                    </span>
+                    <ExternalLink className="w-4 h-4 shrink-0" />
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  data-nebula-light="true"
+                  onClick={() => handleCopy(`pay-${activePayment.id}`, activePayment.copyText)}
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    activePayment.href
+                      ? 'border-[var(--ui-border-strong)] bg-[var(--ui-deep)] hover:border-[var(--ui-accent)] text-white'
+                      : 'border-[var(--ui-accent)]/45 bg-[var(--ui-btn-bg)] hover:bg-[var(--ui-btn-hover)] text-[var(--ui-btn-text)]'
+                  }`}
+                >
+                  {copiedId === `pay-${activePayment.id}` ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{lang === 'ru' ? 'Скопировано' : 'Copied'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-[var(--ui-accent)] shrink-0" />
+                      <span>
+                        {activePayment.id === 'crypto'
+                          ? lang === 'ru'
+                            ? 'Скопировать адрес'
+                            : 'Copy address'
+                          : lang === 'ru'
+                            ? 'Скопировать ссылку'
+                            : 'Copy link'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </section>

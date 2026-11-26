@@ -1,6 +1,7 @@
-// Load status of the artist's order queue.
-// Set the value below to change the active status of the workspace:
-// 0 - Свободный (Green, no price changes)
-// 1 - Средний (Yellow, +20% markup on the entire order)
-// 2 - Полный (Red, fully blocks ordering, EXCEPT if "No Deadline" is selected/ON)
-export const CURRENT_LOAD_STATUS: 0 | 1 | 2 = 1;
+// Order status of the artist's queue.
+// Set the value below to change the active status:
+// 0 - Свободно (Все заказы выполняются в обычном порядке.)
+// 1 - Слабо загружено (Заказы задержатся на 2 недели.)
+// 2 - Загружено (Заказы могут задерживаться на месяц и более.)
+// 3 - Закрыты (Заказы не принимаются в ближайшее время.)
+export const CURRENT_LOAD_STATUS: 0 | 1 | 2 | 3 = 1;

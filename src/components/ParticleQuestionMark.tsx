@@ -4,27 +4,35 @@ type ShapeId =
   | 'question'
   | 'cube'
   | 'sphere'
+  | 'cylinder'
   | 'fire'
   | 'triangle'
   | 'letter'
   | 'star'
+  | 'skull'
+  | 'sword'
+  | 'clock'
   | 'paw';
 
 interface ShapeTarget {
   x: number;
   y: number;
-  intensity: number; // 0.35 .. 1.0
+  intensity: number;
 }
 
 interface SwarmParticle {
   x: number;
   y: number;
+  orbitR: number;
+  baseAngle: number;
+  orbitSpeed: number;
+  isArmMember: boolean;
+  orbitEcc: number;
+  radialAmp: number;
+  radialFreq: number;
   tx: number;
   ty: number;
   tIntensity: number;
-  orbitAngle: number;
-  orbitRadius: number;
-  orbitSpeed: number;
   driftPhase: number;
   stagger: number;
   active: boolean;
@@ -49,8 +57,8 @@ function sampleBitmap(rows: string[]): ShapeTarget[] {
     for (let x = 0; x < row.length; x++) {
       const ch = row[x];
       if (ch === '.') continue;
-      const intensity = ch === '3' ? 1.0 : ch === '2' ? 0.72 : 0.45;
-      targets.push({ x: x - cx, y: y - cy, intensity });
+      const intensity = ch === '3' ? 1.0 : ch === '2' ? 0.8 : 0.52;
+      targets.push({ x: Math.round(x - cx), y: Math.round(y - cy), intensity });
     }
   }
   return targets;
@@ -58,8 +66,8 @@ function sampleBitmap(rows: string[]): ShapeTarget[] {
 
 function generateQuestionTargets(): ShapeTarget[] {
   return sampleBitmap([
-    '....22222....',
-    '..223333322..',
+    '....23332....',
+    '..233333332..',
     '.23332223332.',
     '.2332...2332.',
     '.222.....332.',
@@ -78,11 +86,9 @@ function generateQuestionTargets(): ShapeTarget[] {
 
 function generateCubeTargets(): ShapeTarget[] {
   const targets: ShapeTarget[] = [];
-  // Crisp isometric pixel cube (top face bright, left mid, right shaded, crisp ridge edges)
   const size = 10;
   for (let py = -11; py <= 11; py++) {
     for (let px = -11; px <= 11; px++) {
-      // Top diamond face: |px|/10 + |py + 5|/5 <= 1
       const topU = Math.abs(px) / size + Math.abs(py + 5) / 5;
       if (topU <= 1.02) {
         const isEdge = topU >= 0.84;
@@ -90,19 +96,17 @@ function generateCubeTargets(): ShapeTarget[] {
         continue;
       }
 
-      // Left face: px in [-10, 0], top edge py >= -5 - (px + 10)*0.5 => wait: center is (0,0), bottom is (0,10)
       if (px >= -size && px <= 0) {
         const topEdge = px * 0.5;
         const botEdge = 10 + px * 0.5;
         if (py >= topEdge && py <= botEdge) {
           const isEdge =
             px === -size || px === 0 || py - topEdge < 1.1 || botEdge - py < 1.1;
-          targets.push({ x: px, y: py, intensity: isEdge ? 0.98 : 0.64 });
+          targets.push({ x: px, y: py, intensity: isEdge ? 1.0 : 0.68 });
           continue;
         }
       }
 
-      // Right face: px in [1, 10]
       if (px > 0 && px <= size) {
         const topEdge = -px * 0.5;
         const botEdge = 10 - px * 0.5;
@@ -110,7 +114,7 @@ function generateCubeTargets(): ShapeTarget[] {
           const isEdge =
             px === size || py - topEdge < 1.1 || botEdge - py < 1.1;
           if (isEdge || ((px + py) & 1) === 0) {
-            targets.push({ x: px, y: py, intensity: isEdge ? 0.92 : 0.42 });
+            targets.push({ x: px, y: py, intensity: isEdge ? 0.96 : 0.48 });
           }
         }
       }
@@ -138,9 +142,52 @@ function generateSphereTargets(): ShapeTarget[] {
       const isRim = distSq > (r - 1.25) * (r - 1.25);
 
       const bayer = (BAYER_4X4[(py + 16) & 3][(px + 16) & 3] + 0.5) / 16;
-      if (isRim || dot > bayer * 0.72 + 0.08) {
-        const intensity = dot > 0.76 ? 1.0 : dot > 0.42 ? 0.78 : isRim ? 0.52 : 0.48;
+      if (isRim || dot > bayer * 0.7 + 0.08) {
+        const intensity = dot > 0.76 ? 1.0 : dot > 0.42 ? 0.8 : isRim ? 0.6 : 0.52;
         targets.push({ x: px, y: py, intensity });
+      }
+    }
+  }
+  return targets;
+}
+
+function generateCylinderTargets(): ShapeTarget[] {
+  const targets: ShapeTarget[] = [];
+  const rx = 8.5;
+  const ry = 3.2;
+  const halfH = 6.5;
+
+  for (let py = -11; py <= 11; py++) {
+    for (let px = -10; px <= 10; px++) {
+      const topDy = (py + halfH) / ry;
+      const dxNorm = px / rx;
+      const topEll = dxNorm * dxNorm + topDy * topDy;
+      if (topEll <= 1.04) {
+        const isRim = topEll >= 0.72;
+        targets.push({ x: px, y: py, intensity: isRim ? 1.0 : 0.86 });
+        continue;
+      }
+
+      if (Math.abs(px) <= rx) {
+        const arcOffset = ry * Math.sqrt(Math.max(0, 1 - dxNorm * dxNorm));
+        const bottomY = halfH + arcOffset;
+        if (py > -halfH && py <= bottomY) {
+          const isSideEdge = Math.abs(px) >= rx - 1.1;
+          const isBottomEdge = bottomY - py < 1.15;
+          if (isSideEdge || isBottomEdge) {
+            targets.push({ x: px, y: py, intensity: 0.98 });
+          } else {
+            const light = Math.max(0, 0.72 - dxNorm * 0.55);
+            const bayer = (BAYER_4X4[(py + 16) & 3][(px + 16) & 3] + 0.5) / 16;
+            if (light > bayer * 0.78) {
+              targets.push({
+                x: px,
+                y: py,
+                intensity: light > 0.82 ? 0.92 : light > 0.48 ? 0.68 : 0.48,
+              });
+            }
+          }
+        }
       }
     }
   }
@@ -182,7 +229,7 @@ function generateTriangleTargets(): ShapeTarget[] {
       if (isBorder) {
         targets.push({ x: px, y: py, intensity: 1.0 });
       } else if (((px + py) & 1) === 0 && py > -4) {
-        targets.push({ x: px, y: py, intensity: 0.48 });
+        targets.push({ x: px, y: py, intensity: 0.54 });
       }
     }
   }
@@ -190,7 +237,6 @@ function generateTriangleTargets(): ShapeTarget[] {
 }
 
 function generateLetterTargets(): ShapeTarget[] {
-  // Bold geometric pixel letter "A"
   return sampleBitmap([
     '......2332......',
     '.....233332.....',
@@ -245,15 +291,110 @@ function generateStarTargets(): ShapeTarget[] {
         !pointInPoly(px, py + 1) ||
         !pointInPoly(px, py - 1);
       const dist = Math.hypot(px, py);
-      const intensity = onEdge ? 1.0 : dist < 3.2 ? 0.95 : 0.65;
+      const intensity = onEdge ? 1.0 : dist < 3.2 ? 0.95 : 0.7;
       targets.push({ x: px, y: py, intensity });
     }
   }
   return targets;
 }
 
+function generateSkullTargets(): ShapeTarget[] {
+  return sampleBitmap([
+    '.....233333332.....',
+    '...2333333333332...',
+    '..233333333333332..',
+    '.23333333333333332.',
+    '.23333333333333332.',
+    '.23333333333333332.',
+    '.2333....333....32.',
+    '.233.....333.....2.',
+    '.233.....333.....2.',
+    '.2333....333....32.',
+    '..2333332.2333332..',
+    '...23333...33332...',
+    '....23333333332....',
+    '....232.323.232....',
+    '....232.323.232....',
+    '.....22.222.22.....',
+  ]);
+}
+
+function generateSwordTargets(): ShapeTarget[] {
+  const targets: ShapeTarget[] = [];
+  for (let py = -11; py <= 11; py++) {
+    for (let px = -11; px <= 11; px++) {
+      const u = (px - py) * 0.7071;
+      const v = (px + py) * 0.7071;
+      const absV = Math.abs(v);
+
+      if (u >= -3.5 && u <= 11.8) {
+        const maxW = u > 8.6 ? Math.max(0.35, (11.8 - u) * 0.62) : 1.85;
+        if (absV <= maxW) {
+          const intensity = v <= 0.15 ? 1.0 : 0.74;
+          targets.push({ x: px, y: py, intensity });
+          continue;
+        }
+      }
+
+      if (u >= -5.4 && u < -3.5 && absV <= 5.2) {
+        const intensity = absV > 3.8 || u < -4.6 ? 1.0 : 0.86;
+        targets.push({ x: px, y: py, intensity });
+        continue;
+      }
+
+      if (u >= -9.2 && u < -5.4 && absV <= 1.15) {
+        targets.push({ x: px, y: py, intensity: 0.68 });
+        continue;
+      }
+
+      if (u >= -11.8 && u < -9.2 && absV <= 2.3) {
+        targets.push({ x: px, y: py, intensity: 0.98 });
+      }
+    }
+  }
+  return targets;
+}
+
+function generateClockTargets(): ShapeTarget[] {
+  const targets: ShapeTarget[] = [];
+  const outerR = 9.8;
+  const innerR = 7.9;
+
+  for (let py = -12; py <= 11; py++) {
+    for (let px = -11; px <= 11; px++) {
+      if (py >= -12 && py <= -10 && Math.abs(px) <= 2) {
+        if (py === -12 || Math.abs(px) === 2 || Math.abs(px) === 0) {
+          targets.push({ x: px, y: py, intensity: 0.92 });
+        }
+        continue;
+      }
+
+      const dist = Math.hypot(px, py);
+      if (dist >= innerR && dist <= outerR) {
+        targets.push({ x: px, y: py, intensity: 1.0 });
+        continue;
+      }
+
+      if (dist < innerR) {
+        const isTick =
+          (px === 0 && Math.abs(py) >= 6 && Math.abs(py) <= 7) ||
+          (py === 0 && Math.abs(px) >= 6 && Math.abs(px) <= 7);
+        const isCenter = Math.abs(px) <= 1 && Math.abs(py) <= 1;
+        const isMinuteHand = px === 0 && py >= -6 && py <= 0;
+        const isHourHand = py === 0 && px >= 0 && px <= 5;
+
+        if (isCenter || isMinuteHand || isHourHand) {
+          targets.push({ x: px, y: py, intensity: 1.0 });
+        } else if (isTick) {
+          targets.push({ x: px, y: py, intensity: 0.62 });
+        }
+      }
+    }
+  }
+  return targets;
+}
+
 function generatePawTargets(): ShapeTarget[] {
-  // Secret 1% chance furry paw!
   return sampleBitmap([
     '.......222...222.......',
     '......23332.23332......',
@@ -280,26 +421,40 @@ const SHAPE_LIBRARY: Record<ShapeId, ShapeTarget[]> = {
   question: generateQuestionTargets(),
   cube: generateCubeTargets(),
   sphere: generateSphereTargets(),
+  cylinder: generateCylinderTargets(),
   fire: generateFireTargets(),
   triangle: generateTriangleTargets(),
   letter: generateLetterTargets(),
   star: generateStarTargets(),
+  skull: generateSkullTargets(),
+  sword: generateSwordTargets(),
+  clock: generateClockTargets(),
   paw: generatePawTargets(),
 };
 
 const REGULAR_SHAPES: ShapeId[] = [
   'cube',
   'sphere',
+  'cylinder',
   'fire',
   'triangle',
   'letter',
   'star',
+  'skull',
+  'sword',
+  'clock',
   'question',
 ];
 
-export function ParticleQuestionMark() {
+interface ParticleQuestionMarkProps {
+  isHovered?: boolean;
+}
+
+export function ParticleQuestionMark({ isHovered = false }: ParticleQuestionMarkProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isHoveredPropRef = useRef(isHovered);
+  isHoveredPropRef.current = isHovered;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -308,15 +463,18 @@ export function ParticleQuestionMark() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const PIXEL_SIZE = 5;
     let width = 80;
     let height = 56;
     let frameData = ctx.createImageData(width, height);
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
-      width = Math.max(48, Math.round(rect.width / PIXEL_SIZE));
-      height = Math.max(36, Math.round(rect.height / PIXEL_SIZE));
+      const pixelSize = rect.height >= 295 ? 6 : 4;
+      const nextW = Math.max(52, Math.round(rect.width / pixelSize));
+      const nextH = Math.max(40, Math.round(rect.height / pixelSize));
+      if (nextW === width && nextH === height && canvas.width === nextW) return;
+      width = nextW;
+      height = nextH;
       canvas.width = width;
       canvas.height = height;
       frameData = ctx.createImageData(width, height);
@@ -326,55 +484,42 @@ export function ParticleQuestionMark() {
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
 
-    // Lightweight deterministic 2D value noise for the mini-nebula cloud
-    const perm = new Uint8Array(512);
-    const vals = new Float32Array(256);
-    for (let i = 0; i < 256; i++) {
-      perm[i] = i;
-      vals[i] = Math.random();
-    }
-    for (let i = 255; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = perm[i];
-      perm[i] = perm[j];
-      perm[j] = tmp;
-    }
-    for (let i = 0; i < 256; i++) {
-      perm[i + 256] = perm[i];
-    }
+    // Central rotating spiral vortex of particles that periodically assembles into shapes
+    const MAX_PARTICLES = 440;
+    const ARM_COUNT = 3;
+    const particles: SwarmParticle[] = Array.from({ length: MAX_PARTICLES }, (_, idx) => {
+      const u = Math.random();
+      const orbitR = 2.4 + Math.pow(u, 1.32) * 23.0;
+      const isArmMember = idx % 3 !== 0;
+      const armIndex = idx % ARM_COUNT;
+      const armSpread = (Math.random() - 0.5) * (0.65 + orbitR * 0.032);
+      const baseAngle = isArmMember
+        ? (armIndex * Math.PI * 2) / ARM_COUNT + orbitR * 0.23 + armSpread
+        : Math.random() * Math.PI * 2;
+      const orbitSpeed = isArmMember
+        ? 0.34
+        : 0.24 + (0.48 / (0.65 + orbitR * 0.12)) * (0.8 + Math.random() * 0.35);
+      const startX = Math.cos(baseAngle) * orbitR;
+      const startY = Math.sin(baseAngle) * orbitR * 0.88;
 
-    const noise2 = (x: number, y: number) => {
-      const xi = Math.floor(x);
-      const yi = Math.floor(y);
-      const xf = x - xi;
-      const yf = y - yi;
-      const u = xf * xf * (3 - 2 * xf);
-      const v = yf * yf * (3 - 2 * yf);
-      const x0 = xi & 255;
-      const y0 = yi & 255;
-      const x1 = (x0 + 1) & 255;
-      const y1 = (y0 + 1) & 255;
-      const aa = vals[perm[perm[x0] + y0]];
-      const ba = vals[perm[perm[x1] + y0]];
-      const ab = vals[perm[perm[x0] + y1]];
-      const bb = vals[perm[perm[x1] + y1]];
-      return aa + u * (ba - aa) + v * (ab + u * (bb - ab) - (aa + u * (ba - aa)));
-    };
-
-    const MAX_PARTICLES = 290;
-    const particles: SwarmParticle[] = Array.from({ length: MAX_PARTICLES }, (_, i) => ({
-      x: (Math.random() - 0.5) * 26,
-      y: (Math.random() - 0.5) * 20,
-      tx: 0,
-      ty: 0,
-      tIntensity: 0.7,
-      orbitAngle: Math.random() * Math.PI * 2,
-      orbitRadius: 4 + Math.pow(Math.random(), 0.7) * 20,
-      orbitSpeed: (0.014 + Math.random() * 0.022) * (i % 2 === 0 ? 1 : -0.7),
-      driftPhase: Math.random() * Math.PI * 2,
-      stagger: Math.random() * 0.35,
-      active: false,
-    }));
+      return {
+        x: startX,
+        y: startY,
+        orbitR,
+        baseAngle,
+        orbitSpeed,
+        isArmMember,
+        orbitEcc: 0.84 + Math.random() * 0.14,
+        radialAmp: 0.45 + Math.random() * 1.1,
+        radialFreq: 0.45 + Math.random() * 0.7,
+        tx: 0,
+        ty: 0,
+        tIntensity: 0.9,
+        driftPhase: Math.random() * Math.PI * 2,
+        stagger: Math.random() * 0.58,
+        active: false,
+      };
+    });
 
     let currentShape: ShapeId = 'question';
     let lastRegularShape: ShapeId = 'question';
@@ -382,7 +527,6 @@ export function ParticleQuestionMark() {
     const assignShapeTargets = (shape: ShapeId) => {
       currentShape = shape;
       const rawTargets = SHAPE_LIBRARY[shape];
-      // Shuffle target order so particles weave organically across the shape
       const shuffled = [...rawTargets];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -391,23 +535,33 @@ export function ParticleQuestionMark() {
         shuffled[j] = tmp;
       }
 
+      // Keep ~92% of shape points for clear silhouettes with subtle cosmic gaps
+      const activeLimit = Math.max(24, Math.round(shuffled.length * 0.92));
+
+      // Shuffle particle assignment so particles from across the rotating vortex gather into the pattern
+      const indices = Array.from({ length: particles.length }, (_, idx) => idx);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = indices[i];
+        indices[i] = indices[j];
+        indices[j] = tmp;
+      }
+
       for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        if (i < shuffled.length) {
+        const p = particles[indices[i]];
+        if (i < activeLimit) {
           p.tx = shuffled[i].x;
           p.ty = shuffled[i].y;
           p.tIntensity = shuffled[i].intensity;
           p.active = true;
         } else {
-          // Excess particles remain as subtle outer nebula stardust
           p.active = false;
         }
       }
     };
 
     const pickNextShape = (): ShapeId => {
-      // Exact 1% chance to transform into a cute furry paw
-      if (Math.random() < 0.01) {
+      if (Math.random() < 0.02) {
         return 'paw';
       }
       const candidates = REGULAR_SHAPES.filter((s) => s !== lastRegularShape);
@@ -418,35 +572,11 @@ export function ParticleQuestionMark() {
 
     assignShapeTargets('question');
 
-    // Read adaptive theme glow RGB for subtle cosmic tint in the mini-nebula mist
-    let tintRgb: [number, number, number] = [166, 116, 222];
-    const refreshThemeTint = () => {
-      const raw = getComputedStyle(document.documentElement)
-        .getPropertyValue('--ui-glow-rgb')
-        .trim();
-      if (!raw) return;
-      const parts = raw.split(',').map((n) => Number(n.trim()));
-      if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
-        tintRgb = [parts[0], parts[1], parts[2]];
-      }
-    };
-
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-    // Lifecycle timings in seconds
-    const SWIRL_DUR = 1.25;
-    const FORM_DUR = 1.15;
-    const HOLD_DUR = 2.45;
-    const DISSOLVE_DUR = 1.05;
-    const CYCLE_DUR = SWIRL_DUR + FORM_DUR + HOLD_DUR + DISSOLVE_DUR;
-
-    let simTime = prefersReducedMotion ? SWIRL_DUR + FORM_DUR + 0.5 : 0.45;
-    let cycleElapsed = simTime;
-    let frameTick = 0;
     let isVisible = true;
-
     const intersectionObserver = new IntersectionObserver(
       (entries) => {
         isVisible = entries[0]?.isIntersecting ?? true;
@@ -455,132 +585,200 @@ export function ParticleQuestionMark() {
     );
     intersectionObserver.observe(container);
 
-    const drawFrame = () => {
+    let pointer = { x: 0, y: 0, active: false };
+    let localPointerHover = false;
+    const handlePointerEnter = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') {
+        localPointerHover = true;
+      }
+    };
+    const handlePointerMove = (e: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      if (e.pointerType !== 'touch') {
+        localPointerHover = true;
+      }
+      pointer = {
+        x: ((e.clientX - rect.left) / rect.width - 0.5) * width,
+        y: ((e.clientY - rect.top) / rect.height - 0.5) * height,
+        active: true,
+      };
+    };
+    const handlePointerLeave = () => {
+      pointer.active = false;
+      localPointerHover = false;
+    };
+
+    container.addEventListener('pointerenter', handlePointerEnter, { passive: true });
+    container.addEventListener('pointermove', handlePointerMove, { passive: true });
+    container.addEventListener('pointerleave', handlePointerLeave);
+
+    const FORM_DUR = 1.65;
+    const DISSOLVE_DUR = 1.85;
+
+    let simTime = 0;
+    let rawFormation = prefersReducedMotion ? 1 : 0;
+    let wasHoverActive = false;
+    let hasShownInitial = false;
+
+    const renderFrame = (dt: number) => {
       const data = frameData.data;
       data.fill(0);
 
       const cx = Math.floor(width * 0.5);
       const cy = Math.floor(height * 0.5);
-      const minDim = Math.min(width, height);
-      const shapeScale = Math.max(0.85, Math.min(1.42, minDim / 34));
 
-      // Compute phase progress: 0 = loose mini-nebula, 1 = fully formed object
-      let formation = 0;
-      if (cycleElapsed < SWIRL_DUR) {
-        formation = 0;
-      } else if (cycleElapsed < SWIRL_DUR + FORM_DUR) {
-        const u = (cycleElapsed - SWIRL_DUR) / FORM_DUR;
-        formation = u * u * (3 - 2 * u);
-      } else if (cycleElapsed < SWIRL_DUR + FORM_DUR + HOLD_DUR) {
-        formation = 1;
-      } else {
-        const u = (cycleElapsed - SWIRL_DUR - FORM_DUR - HOLD_DUR) / DISSOLVE_DUR;
-        formation = 1 - u * u * (3 - 2 * u);
-      }
+      const formation = rawFormation * rawFormation * (3 - 2 * rawFormation);
 
-      // 1) Draw miniature Bayer-dithered nebula mist around the center
-      const nebRx = 18 * shapeScale * (1.16 - 0.24 * formation);
-      const nebRy = 14 * shapeScale * (1.16 - 0.24 * formation);
-      const minX = Math.max(0, Math.floor(cx - nebRx - 3));
-      const maxX = Math.min(width - 1, Math.ceil(cx + nebRx + 3));
-      const minY = Math.max(0, Math.floor(cy - nebRy - 3));
-      const maxY = Math.min(height - 1, Math.ceil(cy + nebRy + 3));
-
-      const swirlX = simTime * 0.55;
-      const swirlY = simTime * 0.35;
-
-      for (let py = minY; py <= maxY; py++) {
-        const dy = (py - cy) / nebRy;
-        const bayerRow = BAYER_4X4[py & 3];
-        const rowOffset = py * width;
-        for (let px = minX; px <= maxX; px++) {
-          const dx = (px - cx) / nebRx;
-          const dist = Math.hypot(dx, dy);
-          if (dist >= 1.05) continue;
-
-          // Swirling radial cloud mask + pixel noise
-          const angle = Math.atan2(dy, dx);
-          const n =
-            noise2(px * 0.14 + swirlX + Math.cos(angle) * 0.6, py * 0.14 - swirlY + Math.sin(angle) * 0.6) *
-              0.68 +
-            noise2(px * 0.28 - swirlX * 0.7, py * 0.28 + swirlY * 0.7) * 0.32;
-
-          const radialFalloff = Math.max(0, 1 - dist);
-          const density = radialFalloff * (0.42 + 0.85 * n) * (0.72 + 0.28 * (1 - formation));
-          const bayer = (bayerRow[px & 3] + 0.5) / 16;
-
-          if (density > bayer * 0.92 + 0.14) {
-            const idx = (rowOffset + px) << 2;
-            const brightMix = Math.min(1, density * 1.1);
-            // Soft cosmic mist blending active UI tint toward pale stardust white
-            data[idx] = Math.round(tintRgb[0] + (248 - tintRgb[0]) * brightMix * 0.58);
-            data[idx + 1] = Math.round(tintRgb[1] + (244 - tintRgb[1]) * brightMix * 0.58);
-            data[idx + 2] = Math.round(tintRgb[2] + (255 - tintRgb[2]) * brightMix * 0.62);
-            data[idx + 3] = Math.round(Math.min(185, 55 + density * 155));
-          }
-        }
-      }
-
-      // 2) Draw crisp white cosmic particles forming the current shape
       const isPaw = currentShape === 'paw';
       const isFire = currentShape === 'fire';
+      const isStar = currentShape === 'star';
+
+      const patternRot = isStar
+        ? simTime * 0.28
+        : Math.sin(simTime * 1.15) * 0.22 * formation;
+      const rotCos = Math.cos(patternRot);
+      const rotSin = Math.sin(patternRot);
+      const swayX = Math.sin(simTime * 0.9) * 1.65 * formation;
+      const swayY = Math.cos(simTime * 1.35) * 1.25 * formation;
+
+      const swirlScale = Math.max(0.88, Math.min(1.15, height / 62));
+      const glideFree = 1 - Math.exp(-3.1 * dt);
+      const glideSnap = 1 - Math.exp(-5.0 * dt);
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
-        p.orbitAngle += p.orbitSpeed;
 
-        // Loose swirling mini-nebula coordinates
-        const swirlR = p.orbitRadius * (0.78 + 0.22 * Math.sin(simTime * 1.1 + p.driftPhase));
-        const ox = Math.cos(p.orbitAngle) * swirlR * 1.15;
-        const oy = Math.sin(p.orbitAngle) * swirlR * 0.88;
+        if (prefersReducedMotion) {
+          if (!p.active) continue;
+          const px = Math.round(cx + p.tx);
+          const py = Math.round(cy + p.ty);
+          if (px >= 0 && px < width && py >= 0 && py < height) {
+            const idx = (py * width + px) << 2;
+            data[idx] = 255;
+            data[idx + 1] = 252;
+            data[idx + 2] = 255;
+            data[idx + 3] = Math.round(p.tIntensity * 255);
+          }
+          continue;
+        }
 
-        let targetX = ox;
-        let targetY = oy;
-        let alpha = 0.24 + 0.34 * (0.5 + 0.5 * Math.sin(simTime * 2.1 + p.driftPhase));
+        // Slow, smooth rotating central spiral galaxy orbit
+        const armRipple = p.isArmMember
+          ? Math.sin(simTime * 0.42 + p.driftPhase) * 0.2
+          : 0;
+        const angle = p.baseAngle + simTime * p.orbitSpeed + armRipple;
+
+        const r =
+          (p.orbitR +
+            Math.sin(simTime * p.radialFreq + p.driftPhase) * p.radialAmp) *
+          swirlScale;
+
+        const wx = Math.cos(angle) * r;
+        const wy = Math.sin(angle) * r * p.orbitEcc;
+
+        let targetX = wx;
+        let targetY = wy;
+
+        const coreGlow = Math.max(0, 1 - p.orbitR / 26);
+        let alpha =
+          (0.26 + coreGlow * 0.42) *
+          (0.76 + 0.24 * Math.sin(simTime * 1.15 + p.driftPhase));
 
         if (p.active) {
           const localProgress = Math.max(
             0,
-            Math.min(1, (formation * (1 + p.stagger) - p.stagger * 0.45))
+            Math.min(1, formation * (1 + p.stagger) - p.stagger * 0.45)
           );
           const ease = localProgress * localProgress * (3 - 2 * localProgress);
 
-          let fx = p.tx * shapeScale;
-          let fy = p.ty * shapeScale;
+          let fx = p.tx;
+          let fy = p.ty;
 
-          if (isFire && ease > 0.4) {
-            // Gentle living flame flicker
-            const heightRatio = Math.max(0, 0.5 - p.ty / 18);
-            fx += Math.sin(simTime * 7.5 + p.ty * 0.55 + p.driftPhase) * 0.85 * heightRatio * ease;
-            fy += Math.cos(simTime * 6.2 + p.tx * 0.4) * 0.45 * heightRatio * ease;
+          if (isFire && ease > 0.45) {
+            const heightRatio = Math.max(0, 0.55 - p.ty / 18);
+            fx +=
+              Math.sin(simTime * 3.6 + p.ty * 0.55 + p.driftPhase) *
+              0.6 *
+              heightRatio *
+              ease;
           }
 
-          targetX = ox + (fx - ox) * ease;
-          targetY = oy + (fy - oy) * ease;
+          // Gentle breathing softness so edges stay slightly elusive
+          fx += Math.sin(simTime * 1.65 + p.driftPhase) * 0.24;
+          fy += Math.cos(simTime * 1.45 + p.driftPhase * 1.2) * 0.24;
 
-          const shimmer = 0.88 + 0.12 * Math.sin(simTime * 2.8 + p.driftPhase);
-          alpha = alpha + (p.tIntensity * shimmer - alpha) * ease;
+          const rfx = fx * rotCos - fy * rotSin + swayX;
+          const rfy = fx * rotSin + fy * rotCos + swayY;
+
+          // Polar spiral coalescence directly out of the rotating orbit
+          const rOrbit = Math.hypot(wx, wy);
+          const angleOrbit = Math.atan2(wy, wx);
+          const rTarget = Math.hypot(rfx, rfy);
+
+          if (rTarget < 0.05) {
+            targetX = wx * (1 - ease);
+            targetY = wy * (1 - ease);
+          } else {
+            const angleTarget = Math.atan2(rfy, rfx);
+            let angleDiff = angleTarget - angleOrbit;
+            angleDiff =
+              ((((angleDiff + Math.PI) % (Math.PI * 2)) + Math.PI * 2) %
+                (Math.PI * 2)) -
+              Math.PI;
+            const spiralLead = Math.sin(ease * Math.PI) * 0.72;
+            const curR = rOrbit + (rTarget - rOrbit) * ease;
+            const curTheta = angleOrbit + angleDiff * ease + spiralLead;
+            targetX = Math.cos(curTheta) * curR;
+            targetY = Math.sin(curTheta) * curR;
+          }
+
+          const shimmer = 0.82 + 0.16 * Math.sin(simTime * 1.9 + p.driftPhase);
+          alpha = alpha + (p.tIntensity * 0.98 * shimmer - alpha) * ease;
+        } else if (formation > 0.1) {
+          // Leave subtle stray dust drifting around and lightly across the pattern
+          const distFromCenter = Math.hypot(wx, wy);
+          if (distFromCenter < 15.5) {
+            alpha *= Math.max(0.08, 1 - formation * 0.78);
+          } else {
+            alpha *= 1 - formation * 0.28;
+          }
         }
 
-        // Smooth particle inertia
-        p.x += (targetX - p.x) * 0.22;
-        p.y += (targetY - p.y) * 0.22;
+        if (pointer.active && formation < 0.92) {
+          const dx = p.x - pointer.x;
+          const dy = p.y - pointer.y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq > 0.01 && distSq < 120) {
+            const dist = Math.sqrt(distSq);
+            const repulseScale = 1 - formation * 0.85;
+            const strength = ((11 - dist) / 11) * repulseScale;
+            const push = strength * 4.2;
+            const swirlTang = strength * 2.2;
+            targetX += (dx / dist) * push - (dy / dist) * swirlTang;
+            targetY += (dy / dist) * push + (dx / dist) * swirlTang;
+          }
+        }
+
+        const follow = p.active && formation > 0.35 ? glideSnap : glideFree;
+        p.x += (targetX - p.x) * follow;
+        p.y += (targetY - p.y) * follow;
 
         const px = Math.round(cx + p.x);
         const py = Math.round(cy + p.y);
         if (px < 0 || px >= width || py < 0 || py >= height) continue;
 
         const idx = (py * width + px) << 2;
-        const aByte = Math.max(data[idx + 3], Math.min(255, Math.round(alpha * 255)));
+        const aByte = Math.min(255, Math.round(alpha * 255));
+        if (aByte <= data[idx + 3]) continue;
 
         if (isPaw && p.active && formation > 0.5 && p.tIntensity >= 0.9) {
-          // Subtle warm pastel blush on the secret furry paw pads
           data[idx] = 255;
-          data[idx + 1] = 226;
-          data[idx + 2] = 242;
+          data[idx + 1] = 224;
+          data[idx + 2] = 240;
         } else {
           data[idx] = 255;
-          data[idx + 1] = p.active ? 252 : 246;
+          data[idx + 1] = p.active ? 252 : 244;
           data[idx + 2] = 255;
         }
         data[idx + 3] = aByte;
@@ -589,42 +787,52 @@ export function ParticleQuestionMark() {
       ctx.putImageData(frameData, 0, 0);
     };
 
-    refreshThemeTint();
-    drawFrame();
+    renderFrame(1 / 50);
 
     if (prefersReducedMotion) {
       return () => {
         resizeObserver.disconnect();
         intersectionObserver.disconnect();
+        container.removeEventListener('pointerenter', handlePointerEnter);
+        container.removeEventListener('pointermove', handlePointerMove);
+        container.removeEventListener('pointerleave', handlePointerLeave);
       };
     }
 
     let rafId = 0;
-    let lastTime = 0;
-    const FRAME_MS = 1000 / 24;
+    let lastNow = 0;
+    const FRAME_MS = 1000 / 50;
 
     const tick = (now: number) => {
       rafId = requestAnimationFrame(tick);
       if (!isVisible) return;
-      if (now - lastTime < FRAME_MS) return;
+      if (now - lastNow < FRAME_MS) return;
 
-      const dt = lastTime ? Math.min(0.08, (now - lastTime) / 1000) : 1 / 24;
-      lastTime = now;
-
-      frameTick += 1;
-      if (frameTick % 18 === 0) {
-        refreshThemeTint();
-      }
+      const dt = lastNow ? Math.min(0.06, (now - lastNow) / 1000) : 1 / 50;
+      lastNow = now;
 
       simTime += dt;
-      cycleElapsed += dt;
 
-      if (cycleElapsed >= CYCLE_DUR) {
-        cycleElapsed -= CYCLE_DUR;
-        assignShapeTargets(pickNextShape());
+      const hoverActive = isHoveredPropRef.current || localPointerHover;
+      if (hoverActive && !wasHoverActive) {
+        if (rawFormation <= 0.12) {
+          if (!hasShownInitial) {
+            hasShownInitial = true;
+            assignShapeTargets('question');
+          } else {
+            assignShapeTargets(pickNextShape());
+          }
+        }
+      }
+      wasHoverActive = hoverActive;
+
+      if (hoverActive) {
+        rawFormation = Math.min(1, rawFormation + dt / FORM_DUR);
+      } else {
+        rawFormation = Math.max(0, rawFormation - dt / DISSOLVE_DUR);
       }
 
-      drawFrame();
+      renderFrame(dt);
     };
 
     rafId = requestAnimationFrame(tick);
@@ -633,6 +841,9 @@ export function ParticleQuestionMark() {
       cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
+      container.removeEventListener('pointerenter', handlePointerEnter);
+      container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerleave', handlePointerLeave);
     };
   }, []);
 

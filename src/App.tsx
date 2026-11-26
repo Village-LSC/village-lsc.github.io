@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowDown,
   ArrowUp,
@@ -9,9 +10,11 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import {
   Currency,
+  DEFAULT_USD_RATE,
   Language,
   PORTFOLIO_CATEGORIES,
   PortfolioCategory,
@@ -46,6 +49,28 @@ export default function App() {
     }
   });
 
+  const [usdRate, setUsdRate] = useState<number>(DEFAULT_USD_RATE);
+
+  useEffect(() => {
+    let isCancelled = false;
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isCancelled && data?.rates?.RUB && typeof data.rates.RUB === 'number') {
+          const fetchedRate = Number(data.rates.RUB.toFixed(1));
+          if (fetchedRate > 50 && fetchedRate < 200) {
+            setUsdRate(fetchedRate);
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback to DEFAULT_USD_RATE (82)
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
   const [isBgEnabled, setIsBgEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('village_bg_enabled');
@@ -56,9 +81,13 @@ export default function App() {
   });
 
   const [dominantRampIdx, setDominantRampIdx] = useState<number>(0);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(true);
   const [copiedSocialId, setCopiedSocialId] = useState<string | null>(null);
+  const [showLagPrompt, setShowLagPrompt] = useState(false);
+  const [lagPromptDismissed, setLagPromptDismissed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const musicWantedRef = useRef(true);
+  const musicBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const [lightboxState, setLightboxState] = useState<{
     category: PortfolioCategory | null;
@@ -71,6 +100,19 @@ export default function App() {
   useEffect(() => {
     applyNebulaUiTheme(isBgEnabled ? dominantRampIdx : 0);
   }, [isBgEnabled, dominantRampIdx]);
+
+  useEffect(() => {
+    if (!isBgEnabled) {
+      setShowLagPrompt(false);
+    }
+  }, [isBgEnabled]);
+
+  const handlePerformanceLagDetected = useCallback(() => {
+    setShowLagPrompt((prev) => {
+      if (prev || lagPromptDismissed || !isBgEnabled) return prev;
+      return true;
+    });
+  }, [lagPromptDismissed, isBgEnabled]);
 
   useEffect(() => {
     try {
@@ -96,33 +138,94 @@ export default function App() {
     }
   }, [isBgEnabled]);
 
-  const toggleMusic = () => {
+  const getOrCreateAudio = useCallback(() => {
     if (!audioRef.current) {
       const audio = new Audio('/lobby.mp3');
       audio.loop = true;
+      audio.preload = 'auto';
       audio.volume = 0.28;
       audioRef.current = audio;
     }
-
-    if (isMusicPlaying) {
-      audioRef.current.pause();
-      setIsMusicPlaying(false);
-    } else {
-      audioRef.current
-        .play()
-        .then(() => setIsMusicPlaying(true))
-        .catch(() => setIsMusicPlaying(false));
-    }
-  };
+    return audioRef.current;
+  }, []);
 
   useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+    const audio = getOrCreateAudio();
+    musicWantedRef.current = true;
+
+    const attemptPlay = () => {
+      if (!musicWantedRef.current) return;
+      if (!audio.paused) {
+        setIsMusicPlaying(true);
+        return;
+      }
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            if (musicWantedRef.current) {
+              setIsMusicPlaying(true);
+            }
+          })
+          .catch(() => {
+            // Browser blocked unmuted autoplay before user gesture; listeners below will unlock it.
+          });
       }
     };
-  }, []);
+
+    const handleUserGesture = (e: Event) => {
+      if (!musicWantedRef.current) return;
+      if (e.target instanceof Node && musicBtnRef.current?.contains(e.target)) {
+        return;
+      }
+      if (audio.paused) {
+        attemptPlay();
+      }
+    };
+
+    const gestureEvents: Array<keyof WindowEventMap> = [
+      'pointerdown',
+      'mousedown',
+      'touchstart',
+      'keydown',
+      'click',
+    ];
+
+    attemptPlay();
+    gestureEvents.forEach((evt) => {
+      window.addEventListener(evt, handleUserGesture, { capture: true, passive: true });
+    });
+
+    return () => {
+      gestureEvents.forEach((evt) => {
+        window.removeEventListener(evt, handleUserGesture, { capture: true });
+      });
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [getOrCreateAudio]);
+
+  const toggleMusic = () => {
+    const audio = getOrCreateAudio();
+
+    if (isMusicPlaying && !audio.paused) {
+      musicWantedRef.current = false;
+      audio.pause();
+      setIsMusicPlaying(false);
+    } else if (isMusicPlaying && audio.paused) {
+      musicWantedRef.current = true;
+      audio
+        .play()
+        .then(() => setIsMusicPlaying(true))
+        .catch(() => {});
+    } else {
+      musicWantedRef.current = true;
+      audio
+        .play()
+        .then(() => setIsMusicPlaying(true))
+        .catch(() => setIsMusicPlaying(true));
+    }
+  };
 
   const handleSocialCopy = (item: SocialLinkItem) => {
     if (!item.copyText) return;
@@ -152,6 +255,7 @@ export default function App() {
         enabled={isBgEnabled}
         paused={lightboxState.category !== null}
         onDominantPaletteChange={setDominantRampIdx}
+        onPerformanceLagDetected={handlePerformanceLagDetected}
       />
 
       {/* Pinned Top Bar with Expressive System Controls */}
@@ -205,29 +309,85 @@ export default function App() {
 
           {/* Expressive Pinned System Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            <button
-              type="button"
-              data-nebula-light="true"
-              onClick={() => setLang((prev) => (prev === 'ru' ? 'en' : 'ru'))}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border-2 border-[var(--ui-border-strong)] bg-[var(--ui-card)] hover:border-[var(--ui-accent)] hover:bg-[var(--ui-card-hover)] text-white font-mono text-xs sm:text-sm font-bold shadow-[0_0_12px_rgba(var(--ui-glow-rgb),0.12)] active:scale-95 transition-all duration-500 cursor-pointer whitespace-nowrap shrink-0"
-              title={lang === 'ru' ? 'Переключить язык' : 'Switch language'}
+            {/* Clear Segmented Language Switcher */}
+            <div
+              className="inline-flex items-center p-0.5 rounded-xl border-2 border-[var(--ui-border-strong)] bg-[var(--ui-card)]/90 shadow-[0_2px_10px_rgba(0,0,0,0.3)] shrink-0"
+              role="group"
+              aria-label={lang === 'ru' ? 'Выбор языка' : 'Language'}
             >
-              <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[var(--ui-accent)] shrink-0" />
-              <span>{lang === 'ru' ? 'RU' : 'EN'}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setLang('ru')}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg font-mono text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  lang === 'ru'
+                    ? 'bg-[var(--ui-card-hover)] text-white border border-[var(--ui-accent)]/80 shadow-[0_0_10px_rgba(var(--ui-glow-rgb),0.3)]'
+                    : 'text-[var(--ui-text-muted)] hover:text-white'
+                }`}
+                title="Русский язык"
+              >
+                <Globe className={`w-3.5 h-3.5 shrink-0 ${lang === 'ru' ? 'text-[var(--ui-accent)]' : 'opacity-60'}`} />
+                <span>RU</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg font-mono text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  lang === 'en'
+                    ? 'bg-[var(--ui-card-hover)] text-white border border-[var(--ui-accent)]/80 shadow-[0_0_10px_rgba(var(--ui-glow-rgb),0.3)]'
+                    : 'text-[var(--ui-text-muted)] hover:text-white'
+                }`}
+                title="English language"
+              >
+                <span>EN</span>
+              </button>
+            </div>
+
+            {/* Clear Segmented Currency Switcher with Rate Tooltip */}
+            <div
+              className="inline-flex items-center p-0.5 rounded-xl border-2 border-[var(--ui-border-strong)] bg-[var(--ui-card)]/90 shadow-[0_2px_10px_rgba(0,0,0,0.3)] shrink-0"
+              role="group"
+              aria-label={lang === 'ru' ? 'Выбор валюты' : 'Currency'}
+              title={
+                lang === 'ru'
+                  ? `Текущий курс: 1 $ ≈ ${Math.round(usdRate)} ₽`
+                  : `Current rate: $1 ≈ ${Math.round(usdRate)} ₽`
+              }
+            >
+              <button
+                type="button"
+                onClick={() => setCurrency('rub')}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg font-mono text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  currency === 'rub'
+                    ? 'bg-[var(--ui-card-hover)] text-[#f4d35e] border border-[#e6c453]/80 shadow-[0_0_10px_rgba(244,211,94,0.25)]'
+                    : 'text-[var(--ui-text-muted)] hover:text-white'
+                }`}
+                title={lang === 'ru' ? 'Цены в рублях (₽)' : 'Prices in Rubles (₽)'}
+              >
+                <Coins className={`w-3.5 h-3.5 shrink-0 ${currency === 'rub' ? 'text-[#f4d35e]' : 'opacity-60'}`} />
+                <span>₽</span>
+                <span className="hidden sm:inline">RUB</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency('usd')}
+                className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg font-mono text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  currency === 'usd'
+                    ? 'bg-[var(--ui-card-hover)] text-[#34d399] border border-[#34d399]/80 shadow-[0_0_10px_rgba(52,211,153,0.25)]'
+                    : 'text-[var(--ui-text-muted)] hover:text-white'
+                }`}
+                title={
+                  lang === 'ru'
+                    ? `Цены в долларах ($) · Курс: 1 $ ≈ ${Math.round(usdRate)} ₽`
+                    : `Prices in USD ($) · Rate: $1 ≈ ${Math.round(usdRate)} ₽`
+                }
+              >
+                <span>$</span>
+                <span className="hidden sm:inline">USD</span>
+              </button>
+            </div>
 
             <button
-              type="button"
-              data-nebula-light="true"
-              onClick={() => setCurrency((prev) => (prev === 'rub' ? 'usd' : 'rub'))}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border-2 border-[var(--ui-border-strong)] bg-[var(--ui-card)] hover:border-[var(--ui-accent)] hover:bg-[var(--ui-card-hover)] text-white font-mono text-xs sm:text-sm font-bold shadow-[0_0_12px_rgba(var(--ui-glow-rgb),0.12)] active:scale-95 transition-all duration-500 cursor-pointer whitespace-nowrap shrink-0"
-              title={lang === 'ru' ? 'Переключить валюту' : 'Switch currency'}
-            >
-              <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#eab308] shrink-0" />
-              <span>{currency === 'rub' ? '₽ RUB' : '$ USD'}</span>
-            </button>
-
-            <button
+              ref={musicBtnRef}
               type="button"
               data-nebula-light="true"
               onClick={toggleMusic}
@@ -371,6 +531,7 @@ export default function App() {
                     <img
                       src="/images/avatar.jpg"
                       alt="Village_ Avatar"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover rounded-2xl"
                     />
@@ -469,6 +630,7 @@ export default function App() {
                   side={index % 2 === 0 ? 'left' : 'right'}
                   lang={lang}
                   currency={currency}
+                  usdRate={usdRate}
                   onOpenSprite={handleOpenSprite}
                 />
               </div>
@@ -477,7 +639,7 @@ export default function App() {
         </section>
 
         {/* Pricing & Terms */}
-        <PricingAndTermsSection lang={lang} currency={currency} />
+        <PricingAndTermsSection lang={lang} currency={currency} usdRate={usdRate} />
 
         {/* Ready-Made Packs */}
         <ReadyPacksSection lang={lang} />
@@ -508,11 +670,77 @@ export default function App() {
         spriteIndex={lightboxState.spriteIndex}
         lang={lang}
         currency={currency}
+        usdRate={usdRate}
         onClose={handleCloseLightbox}
         onSelectIndex={(nextIdx) =>
           setLightboxState((prev) => ({ ...prev, spriteIndex: nextIdx }))
         }
       />
+
+      {/* Non-intrusive Performance Suggestion When Animated Background Lags */}
+      <AnimatePresence>
+        {showLagPrompt && isBgEnabled && (
+          <motion.aside
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 14 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-[360px] z-50 rounded-2xl border-2 border-[var(--ui-border-strong)] bg-[var(--ui-card)]/95 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.75)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <p className="font-display text-sm sm:text-[15px] font-bold text-white leading-snug">
+                  {lang === 'ru'
+                    ? 'Сайт работает медленнее обычного?'
+                    : 'Is the site feeling sluggish?'}
+                </p>
+                <p className="text-xs sm:text-[13px] text-[var(--ui-text)] leading-relaxed">
+                  {lang === 'ru'
+                    ? 'Можно отключить анимированный космический фон, чтобы прокрутка и интерфейс стали плавнее.'
+                    : 'You can turn off the animated cosmic background for smoother scrolling and responsiveness.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLagPrompt(false);
+                  setLagPromptDismissed(true);
+                }}
+                aria-label={lang === 'ru' ? 'Закрыть' : 'Dismiss'}
+                className="p-1 rounded-lg text-[var(--ui-text-muted)] hover:text-white hover:bg-[var(--ui-surface-alt)] transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-3.5 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBgEnabled(false);
+                  setShowLagPrompt(false);
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--ui-accent)]/40 bg-[var(--ui-btn-bg)] hover:bg-[var(--ui-btn-hover)] text-[var(--ui-btn-text)] text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+              >
+                <EyeOff className="w-3.5 h-3.5 shrink-0" />
+                <span>{lang === 'ru' ? 'Отключить фон' : 'Disable background'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLagPrompt(false);
+                  setLagPromptDismissed(true);
+                }}
+                className="px-3 py-2 rounded-xl border border-[var(--ui-border-strong)] bg-[var(--ui-surface-alt)] hover:bg-[var(--ui-card-hover)] text-[var(--ui-text)] hover:text-white text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+              >
+                {lang === 'ru' ? 'Оставить' : 'Keep'}
+              </button>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

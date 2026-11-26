@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, ZoomIn, ZoomOut, Download } from 'lucide-react';
 import {
   Currency,
+  DEFAULT_USD_RATE,
   Language,
   PortfolioCategory,
   PortfolioSprite,
+  formatCategoryMinAmount,
 } from '../data/portfolioData';
 
 interface SpriteLightboxModalProps {
@@ -14,6 +16,7 @@ interface SpriteLightboxModalProps {
   spriteIndex: number;
   lang: Language;
   currency: Currency;
+  usdRate?: number;
   onClose: () => void;
   onSelectIndex: (index: number) => void;
 }
@@ -28,6 +31,8 @@ export function SpriteLightboxModal({
   category,
   spriteIndex,
   lang,
+  currency,
+  usdRate = DEFAULT_USD_RATE,
   onClose,
 }: SpriteLightboxModalProps) {
   const [zoom, setZoom] = useState<number>(getInitialZoom);
@@ -291,6 +296,16 @@ export function SpriteLightboxModal({
                     {lang === 'ru' ? 'Светлый' : 'Light'}
                   </button>
                 </div>
+              </div>
+
+              {/* Category & Price Badge */}
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--ui-surface-alt)] border border-[var(--ui-border)] text-xs font-mono">
+                <span className="text-[var(--ui-text-muted)]">
+                  {lang === 'ru' ? category.nameRu : category.nameEn}:
+                </span>
+                <span className="text-[#f4d35e] font-bold">
+                  {formatCategoryMinAmount(category.priceSummaryRub, currency, lang, usdRate)}
+                </span>
               </div>
 
               {/* Download & Close */}
